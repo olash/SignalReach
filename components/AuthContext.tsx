@@ -28,6 +28,11 @@ const AuthContext = createContext<AuthContextValue>({
 
 export const useAuth = () => useContext(AuthContext);
 
+// ─── Shared styles ────────────────────────────────────────────────────────────
+
+const inputCls =
+    'w-full px-4 py-2.5 text-sm text-gray-900 bg-[#F9FAFB] border border-gray-200 rounded-xl placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:border-indigo-500 transition-all';
+
 // ─── Login Gate ───────────────────────────────────────────────────────────────
 
 function LoginGate() {
@@ -37,18 +42,20 @@ function LoginGate() {
     const [fullName, setFullName] = useState('');
     const [busy, setBusy] = useState(false);
 
-    const inputCls =
-        'w-full px-4 py-2.5 text-sm text-gray-900 bg-[#F9FAFB] border border-gray-200 rounded-xl placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all';
-
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         setBusy(true);
         try {
             if (isSignUp) {
+                if (!fullName.trim()) {
+                    toast.error('Please enter your full name.');
+                    setBusy(false);
+                    return;
+                }
                 const { error } = await supabase.auth.signUp({
                     email,
                     password,
-                    options: { data: { full_name: fullName } },
+                    options: { data: { full_name: fullName.trim() } },
                 });
                 if (error) throw error;
                 toast.success('Account created! Welcome to SignalReach.');
@@ -90,7 +97,7 @@ function LoginGate() {
                             {isSignUp ? 'Create your account' : 'Welcome back'}
                         </h2>
                         <p className="text-sm text-gray-500 mt-1.5">
-                            {isSignUp ? 'Start capturing leads in seconds.' : 'Sign in to your dashboard.'}
+                            {isSignUp ? 'Start capturing signals in seconds.' : 'Sign in to your dashboard.'}
                         </p>
                     </div>
 

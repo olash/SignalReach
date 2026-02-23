@@ -182,8 +182,8 @@ app.post('/api/cron/scrape', requireCronSecret, async (_req, res) => {
                     return;
                 }
 
-                // 2c ── Map items to the leads table schema
-                const leads = items
+                // 2c ── Map items to the signals table schema
+                const signals = items
                     .filter((item) => item.body || item.title) // skip empty posts
                     .map((item) => ({
                         workspace_id: workspace.id,
@@ -194,22 +194,22 @@ app.post('/api/cron/scrape', requireCronSecret, async (_req, res) => {
                         status: 'new',
                     }));
 
-                if (leads.length === 0) return;
+                if (signals.length === 0) return;
 
-                // 2d ── Insert into public.leads
+                // 2d ── Insert into public.signals
                 const { error: insertErr, count } = await supabaseAdmin
-                    .from('leads')
-                    .insert(leads, { count: 'exact' });
+                    .from('signals')
+                    .insert(signals, { count: 'exact' });
 
                 if (insertErr) {
                     console.error(`[cron/scrape] ❌  Insert failed for workspace ${workspace.id}:`, insertErr.message);
                     return;
                 }
 
-                const inserted = count ?? leads.length;
+                const inserted = count ?? signals.length;
                 totalInserted += inserted;
                 workspacesScraped += 1;
-                console.log(`[cron/scrape] ✅  Inserted ${inserted} leads for workspace ${workspace.id}`);
+                console.log(`[cron/scrape] ✅  Inserted ${inserted} signals for workspace ${workspace.id}`);
 
             } catch (err) {
                 console.error(`[cron/scrape] ❌  Error processing workspace ${workspace.id}:`, err?.message ?? err);
@@ -217,7 +217,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (_req, res) => {
         })
     );
 
-    console.log(`[cron/scrape] 🏁  Done. ${totalInserted} leads inserted across ${workspacesScraped} workspace(s).`);
+    console.log(`[cron/scrape] 🏁  Done. ${totalInserted} signals inserted across ${workspacesScraped} workspace(s).`);
     return res.json({
         ok: true,
         inserted: totalInserted,

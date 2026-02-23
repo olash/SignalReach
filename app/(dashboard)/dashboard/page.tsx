@@ -10,16 +10,16 @@ import { useWorkspace } from '@/components/WorkspaceContext';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Platform = 'all' | 'reddit' | 'twitter' | 'linkedin';
-type LeadStatus = 'new' | 'drafted' | 'replied' | 'dismissed';
+type SignalStatus = 'new' | 'drafted' | 'replied' | 'dismissed';
 
-interface Lead {
+interface Signal {
     id: string;
     workspace_id: string;
     platform: 'reddit' | 'twitter' | 'linkedin';
     author_handle: string;
     post_content: string;
     post_url: string | null;
-    status: LeadStatus;
+    status: SignalStatus;
 }
 
 interface PanelProspect {
@@ -31,7 +31,7 @@ interface PanelProspect {
 // ─── Column configuration ────────────────────────────────────────────────────
 
 const COLUMN_CONFIG: {
-    id: LeadStatus;
+    id: SignalStatus;
     title: string;
     icon: string;
     accent: string;
@@ -164,30 +164,30 @@ function SkeletonCard() {
 
 export default function DashboardPage() {
     const { activeWorkspace } = useWorkspace();
-    const [leads, setLeads] = useState<Lead[]>([]);
+    const [signals, setSignals] = useState<Signal[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState<Platform>('all');
     const [panelOpen, setPanelOpen] = useState(false);
     const [panelProspect, setPanelProspect] = useState<PanelProspect | undefined>();
 
     // ── Data fetching ──────────────────────────────────────────────────────────
-    const fetchLeads = useCallback(async () => {
+    const fetchSignals = useCallback(async () => {
         if (!activeWorkspace) { setLoading(false); return; }
         setLoading(true);
         try {
-            const { data: rows, error: leadsErr } = await supabase
-                .from('leads')
+            const { data: rows, error: signalsErr } = await supabase
+                .from('signals')
                 .select('id, workspace_id, platform, author_handle, post_content, post_url, status')
                 .eq('workspace_id', activeWorkspace.id)
                 .order('id', { ascending: false });
 
-            if (leadsErr) {
-                toast.error('Failed to load leads.');
-                console.error('[Dashboard] leads fetch error:', leadsErr.message);
+            if (signalsErr) {
+                toast.error('Failed to load signals.');
+                console.error('[Dashboard] signals fetch error:', signalsErr.message);
                 return;
             }
 
-            setLeads((rows ?? []) as Lead[]);
+            setSignals((rows ?? []) as Signal[]);
         } catch (err) {
             console.error('[Dashboard] unexpected error:', err);
             toast.error('Something went wrong loading your board.');
@@ -196,14 +196,14 @@ export default function DashboardPage() {
         }
     }, [activeWorkspace]);
 
-    useEffect(() => { fetchLeads(); }, [fetchLeads]);
+    useEffect(() => { fetchSignals(); }, [fetchSignals]);
 
     // ── Open AI panel ──────────────────────────────────────────────────────────
-    const openPanel = (lead: Lead) => {
+    const openPanel = (signal: Signal) => {
         setPanelProspect({
-            platform: lead.platform,
-            handle: `@${lead.author_handle}`,
-            originalPost: lead.post_content,
+            platform: signal.platform,
+            handle: `@${signal.author_handle}`,
+            originalPost: signal.post_content,
         });
         setPanelOpen(true);
     };
@@ -212,30 +212,25 @@ export default function DashboardPage() {
     const handleDragEnd = async (result: DropResult) => {
         const { source, destination, draggableId } = result;
 
-        // Dropped outside a column or in the same column
         if (!destination || source.droppableId === destination.droppableId) return;
 
-        const newStatus = destination.droppableId as LeadStatus;
-        const leadId = draggableId;
+        const newStatus = destination.droppableId as SignalStatus;
+        const signalId = draggableId;
 
-        // Snapshot for rollback
-        const snapshot = leads;
+        const snapshot = signals;
 
-        // Optimistic update
-        setLeads((prev) =>
-            prev.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l))
+        setSignals((prev) =>
+            prev.map((s) => (s.id === signalId ? { ...s, status: newStatus } : s))
         );
 
-        // Persist to Supabase
         const { error } = await supabase
-            .from('leads')
+            .from('signals')
             .update({ status: newStatus })
-            .eq('id', leadId);
+            .eq('id', signalId);
 
         if (error) {
-            // Rollback
-            setLeads(snapshot);
-            toast.error('Could not update lead status. Please try again.');
+            setSignals(snapshot);
+            toast.error('Could not update signal status. Please try again.');
             console.error('[Dashboard] status update error:', error.message);
         } else {
             toast.success(`Moved to ${COLUMN_CONFIG.find(c => c.id === newStatus)?.title ?? newStatus}`);
@@ -243,8 +238,8 @@ export default function DashboardPage() {
     };
 
     // ── Derived columns ────────────────────────────────────────────────────────
-    const byStatus = (status: LeadStatus) =>
-        leads.filter((l) => l.status === status);
+    const byStatus = (status: SignalStatus) =>
+        signals.filter((s) => s.status === status);
 
     const filteredNew = () =>
         byStatus('new').filter(

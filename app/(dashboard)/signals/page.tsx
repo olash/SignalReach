@@ -7,15 +7,15 @@ import { supabase } from '@/lib/supabase';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Platform = 'reddit' | 'twitter' | 'linkedin';
-type LeadStatus = 'new' | 'drafted' | 'replied' | 'dismissed';
+type SignalStatus = 'new' | 'drafted' | 'replied' | 'dismissed';
 
-interface Lead {
+interface Signal {
     id: string;
     platform: Platform;
     author_handle: string;
     post_content: string;
     post_url: string | null;
-    status: LeadStatus;
+    status: SignalStatus;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ const PLATFORM_META: Record<Platform, { icon: string; color: string; label: stri
     linkedin: { icon: 'solar:linkedin-linear', color: 'text-blue-600', label: 'LinkedIn' },
 };
 
-const STATUS_META: Record<LeadStatus, { label: string; cls: string }> = {
+const STATUS_META: Record<SignalStatus, { label: string; cls: string }> = {
     new: { label: 'New', cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
     drafted: { label: 'Drafted', cls: 'bg-amber-50 text-amber-600 border-amber-200' },
     replied: { label: 'Replied', cls: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
@@ -55,11 +55,11 @@ function SkeletonRow() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SignalsPage() {
-    const [leads, setLeads] = useState<Lead[]>([]);
+    const [signals, setSignals] = useState<Signal[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
 
-    const fetchLeads = useCallback(async () => {
+    const fetchSignals = useCallback(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { setLoading(false); return; }
@@ -73,25 +73,25 @@ export default function SignalsPage() {
         if (!workspaces?.length) { setLoading(false); return; }
 
         const { data, error } = await supabase
-            .from('leads')
+            .from('signals')
             .select('id, platform, author_handle, post_content, post_url, status')
             .eq('workspace_id', workspaces[0].id)
             .order('id', { ascending: false });
 
         if (error) toast.error('Failed to load signals.');
-        else setLeads((data ?? []) as Lead[]);
+        else setSignals((data ?? []) as Signal[]);
         setLoading(false);
     }, []);
 
-    useEffect(() => { fetchLeads(); }, [fetchLeads]);
+    useEffect(() => { fetchSignals(); }, [fetchSignals]);
 
-    const filtered = leads.filter((l) => {
+    const filtered = signals.filter((s) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
         return (
-            l.author_handle.toLowerCase().includes(q) ||
-            l.post_content.toLowerCase().includes(q) ||
-            l.platform.toLowerCase().includes(q)
+            s.author_handle.toLowerCase().includes(q) ||
+            s.post_content.toLowerCase().includes(q) ||
+            s.platform.toLowerCase().includes(q)
         );
     });
 
@@ -104,7 +104,7 @@ export default function SignalsPage() {
                     <p className="text-sm text-gray-400 mt-0.5">Every raw lead from your scrapers, in one place.</p>
                 </div>
                 <button
-                    onClick={fetchLeads}
+                    onClick={fetchSignals}
                     className="flex items-center gap-2 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 active:scale-95 px-4 py-2 rounded-full border border-indigo-100 transition-all duration-150"
                 >
                     {/* @ts-expect-error custom element */}
@@ -216,7 +216,7 @@ export default function SignalsPage() {
             {/* Footer count */}
             {!loading && (
                 <p className="text-xs text-gray-400 text-center">
-                    Showing <span className="font-medium text-gray-600">{filtered.length}</span> of <span className="font-medium text-gray-600">{leads.length}</span> signals
+                    Showing <span className="font-medium text-gray-600">{filtered.length}</span> of <span className="font-medium text-gray-600">{signals.length}</span> signals
                 </p>
             )}
         </div>

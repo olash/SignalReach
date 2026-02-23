@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 
 type Platform = 'reddit' | 'twitter' | 'linkedin';
 
-interface Lead {
+interface Signal {
     id: string;
     platform: Platform;
     author_handle: string;
@@ -25,7 +25,7 @@ const PLATFORM_META: Record<Platform, { icon: string; color: string; label: stri
     linkedin: { icon: 'solar:linkedin-linear', color: 'text-blue-600', label: 'LinkedIn', bg: 'bg-blue-50' },
 };
 
-const STATIC_PLACEHOLDERS: Lead[] = [
+const STATIC_PLACEHOLDERS: Signal[] = [
     {
         id: 'ph-1',
         platform: 'reddit',
@@ -68,9 +68,9 @@ function SkeletonItem() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InboxPage() {
-    const [leads, setLeads] = useState<Lead[]>([]);
+    const [leads, setLeads] = useState<Signal[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selected, setSelected] = useState<Lead | null>(null);
+    const [selected, setSelected] = useState<Signal | null>(null);
     const [draftText, setDraftText] = useState('');
     const [sending, setSending] = useState(false);
 
@@ -96,7 +96,7 @@ export default function InboxPage() {
         }
 
         const { data, error } = await supabase
-            .from('leads')
+            .from('signals')
             .select('id, platform, author_handle, post_content, post_url, status')
             .eq('workspace_id', workspaces[0].id)
             .in('status', ['drafted', 'new'])
@@ -105,7 +105,7 @@ export default function InboxPage() {
         if (error || !data?.length) {
             setLeads(STATIC_PLACEHOLDERS);
         } else {
-            setLeads(data as Lead[]);
+            setLeads(data as Signal[]);
         }
         setLoading(false);
     }, []);
@@ -120,7 +120,7 @@ export default function InboxPage() {
         }
     }, [loading, leads, selected]);
 
-    const handleSelect = (lead: Lead) => {
+    const handleSelect = (lead: Signal) => {
         setSelected(lead);
         setDraftText('');
     };

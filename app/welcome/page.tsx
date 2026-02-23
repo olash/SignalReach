@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Platform = 'reddit' | 'twitter' | 'linkedin';
 type Persona = 'freelancer' | 'saas';
 
 interface FormState {
     platforms: Platform[];
-    persona: Persona;
+    persona: Persona | null;
     twitterHandle: string;
     redditUsername: string;
     linkedinUrl: string;
@@ -20,45 +20,35 @@ interface FormState {
     keywords: string;
 }
 
-// ─── Progress bar widths per step (step 0 = no fill) ─────────────────────────
 const STEP_PROGRESS: Record<number, string> = {
-    0: 'w-0',
     1: 'w-1/3',
     2: 'w-2/3',
     3: 'w-full',
 };
 
-// ─── Platform config ─────────────────────────────────────────────────────────
 const PLATFORMS: { id: Platform; label: string; icon: string; color: string; bg: string }[] = [
     { id: 'reddit', label: 'Reddit', icon: 'solar:reddit-linear', color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200' },
     { id: 'twitter', label: 'Twitter', icon: 'solar:twitter-linear', color: 'text-sky-500', bg: 'bg-sky-50 border-sky-200' },
     { id: 'linkedin', label: 'LinkedIn', icon: 'solar:linkedin-linear', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' },
 ];
 
-// ─── Shared input styles ──────────────────────────────────────────────────────
 const inputCls =
     'w-full px-3.5 py-2.5 text-sm text-[#111827] bg-[#F9FAFB] border border-gray-200 rounded-lg placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all duration-200';
-
 const labelCls = 'block text-xs font-medium text-gray-500 mb-1.5';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function WelcomePage() {
     const router = useRouter();
-    // step 0 = sign-up gate, 1–3 = onboarding steps
-    const [step, setStep] = useState(0);
+    // Start at step 1 directly — auth already handled by AuthContext
+    const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'url' | 'manual'>('url');
-
-    // Step 0 state
-    const [email, setEmail] = useState('');
-    const [signupBusy, setSignupBusy] = useState(false);
-    const [magicSent, setMagicSent] = useState(false);
     const [sessionChecked, setSessionChecked] = useState(false);
 
     const [form, setForm] = useState<FormState>({
         platforms: [],
-        persona: 'saas',
+        persona: null,
         twitterHandle: '',
         redditUsername: '',
         linkedinUrl: '',
@@ -66,49 +56,28 @@ export default function WelcomePage() {
         keywords: '',
     });
 
-    // ── Detect existing / new session and auto-advance past step 0 ───────────
+    // ── On mount: verify auth and check if workspace already exists ──────────
 
     useEffect(() => {
-        // Check for an existing session on mount
-        supabase.auth.getSession().then(({ data }) => {
+        supabase.auth.getSession().then(async ({ data }) => {
+            if (!data.session) {
+                router.replace('/dashboard'); // AuthGate will show login
+                return;
+            }
+            // If user already has a workspace, skip onboarding
+            const { data: ws } = await supabase
+                .from('workspaces')
+                .select('id')
+                .eq('user_id', data.session.user.id)
+                .limit(1);
+
+            if (ws && ws.length > 0) {
+                router.replace('/dashboard');
+                return;
+            }
             setSessionChecked(true);
-            if (data.session) {
-                setStep(1); // already logged in → skip sign-up gate
-            }
         });
-
-        // Listen for auth changes (e.g. magic link confirmed in same tab)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (session && step === 0) {
-                setStep(1);
-            }
-        });
-
-        return () => subscription.unsubscribe();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // ── Step 0 — Send Magic Link ──────────────────────────────────────────────
-
-    const handleMagicLink = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!email.trim()) return;
-        setSignupBusy(true);
-        const { error } = await supabase.auth.signInWithOtp({
-            email: email.trim(),
-            options: {
-                // When the user clicks the link in their email, the session
-                // is established and onAuthStateChange fires, advancing to step 1.
-                emailRedirectTo: window.location.href,
-            },
-        });
-        setSignupBusy(false);
-        if (error) {
-            toast.error(error.message);
-        } else {
-            setMagicSent(true);
-        }
-    };
+    }, [router]);
 
     // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -125,7 +94,18 @@ export default function WelcomePage() {
         setActiveTab(p === 'saas' ? 'url' : 'manual');
     };
 
-    const handleFinish = async () => completeOnboarding();
+    // Step 1 is valid when ≥1 platform AND a persona are both selected
+    const step1Valid = form.platforms.length > 0 && form.persona !== null;
+
+    // Step 2 is valid when every selected platform has its handle filled in
+    const step2Valid = form.platforms.every((p) => {
+        if (p === 'twitter') return form.twitterHandle.trim().length > 0;
+        if (p === 'reddit') return form.redditUsername.trim().length > 0;
+        if (p === 'linkedin') return form.linkedinUrl.trim().length > 0;
+        return true;
+    });
+
+    // ── Complete Onboarding ────────────────────────────────────────────────────
 
     const completeOnboarding = async () => {
         setLoading(true);
@@ -169,16 +149,24 @@ export default function WelcomePage() {
             }
 
             toast.success('Workspace created! Scanning for signals...');
+
+            // 3 ─ Fire scraper in the background — do NOT await so the user
+            //     is redirected immediately while Apify works in the background.
+            fetch('https://signalreach.onrender.com/api/cron/scrape', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer signalreach_cron_99x!' },
+            }).catch((err) => console.error('[onboarding] Background scrape trigger failed:', err));
+
             router.push('/dashboard');
         } catch (err) {
             console.error('[onboarding]', err);
-            toast.error('Could not save your setup.');
+            toast.error('Could not save your setup. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
-    // ── Loading shimmer while we check for an existing session ───────────────
+    // ── Loading shimmer ────────────────────────────────────────────────────────
 
     if (!sessionChecked) {
         return (
@@ -205,95 +193,19 @@ export default function WelcomePage() {
                 {/* Card */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
 
-                    {/* Progress bar — hidden on step 0 */}
+                    {/* Progress bar */}
                     <div className="h-1.5 bg-gray-100 w-full">
-                        <div
-                            className={`h-full bg-indigo-600 transition-all duration-500 ease-out ${STEP_PROGRESS[step]}`}
-                        />
+                        <div className={`h-full bg-indigo-600 transition-all duration-500 ease-out ${STEP_PROGRESS[step]}`} />
                     </div>
 
                     <div className="px-8 pt-8 pb-9">
 
-                        {/* Step indicator — only shown once onboarding starts */}
-                        {step > 0 && (
-                            <p className="text-[11px] font-semibold uppercase tracking-widest text-indigo-500 mb-1">
-                                Step {step} of 3
-                            </p>
-                        )}
+                        {/* Step indicator */}
+                        <p className="text-[11px] font-semibold uppercase tracking-widest text-indigo-500 mb-1">
+                            Step {step} of 3
+                        </p>
 
-                        {/* ── STEP 0 — Sign-Up Gate ────────────────────────────────────── */}
-                        {step === 0 && (
-                            <div className="flex flex-col gap-6">
-                                <div>
-                                    <h1 className="text-xl font-semibold text-[#111827] tracking-tight">
-                                        Create your free account
-                                    </h1>
-                                    <p className="text-sm text-gray-500 mt-1">
-                                        We&apos;ll send you a magic link — no password required.
-                                    </p>
-                                </div>
-
-                                {magicSent ? (
-                                    <div className="flex flex-col items-center gap-3 py-6 text-center">
-                                        {/* @ts-expect-error custom element */}
-                                        <iconify-icon icon="solar:letter-opened-linear" class="text-5xl text-indigo-500" />
-                                        <p className="text-sm font-medium text-gray-900">Check your inbox</p>
-                                        <p className="text-xs text-gray-500 max-w-xs">
-                                            We sent a magic link to{' '}
-                                            <span className="font-medium text-gray-700">{email}</span>.
-                                            Click it and you&apos;ll land right back here, signed in.
-                                        </p>
-                                        <button
-                                            onClick={() => setMagicSent(false)}
-                                            className="text-xs text-indigo-500 hover:text-indigo-700 underline underline-offset-2 transition-colors mt-1"
-                                        >
-                                            Try a different email
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <form onSubmit={handleMagicLink} className="flex flex-col gap-4">
-                                        <div>
-                                            <label className={labelCls}>Email address</label>
-                                            <input
-                                                type="email"
-                                                required
-                                                autoFocus
-                                                placeholder="you@company.com"
-                                                value={email}
-                                                onChange={(e) => setEmail(e.target.value)}
-                                                className={inputCls}
-                                            />
-                                        </div>
-                                        <button
-                                            type="submit"
-                                            disabled={signupBusy}
-                                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98] text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm flex items-center justify-center gap-2"
-                                        >
-                                            {signupBusy ? (
-                                                /* @ts-expect-error custom element */
-                                                <iconify-icon icon="solar:spinner-linear" class="text-base animate-spin" />
-                                            ) : (
-                                                /* @ts-expect-error custom element */
-                                                <iconify-icon icon="solar:letter-linear" class="text-base" />
-                                            )}
-                                            {signupBusy ? 'Sending…' : 'Send Magic Link'}
-                                        </button>
-                                    </form>
-                                )}
-
-                                <p className="text-center text-xs text-gray-400">
-                                    Already have an account?{' '}
-                                    <a
-                                        href="/dashboard"
-                                        className="text-indigo-500 hover:text-indigo-700 font-medium underline underline-offset-2 transition-colors"
-                                    >
-                                        Sign in
-                                    </a>
-                                </p>
-                            </div>
-                        )}
-
-                        {/* ── STEP 1 ──────────────────────────────────────────────────── */}
+                        {/* ── STEP 1 — Platforms & Persona ──────────────────────────────── */}
                         {step === 1 && (
                             <div className="flex flex-col gap-6">
                                 <div>
@@ -301,7 +213,7 @@ export default function WelcomePage() {
                                         Where do your ideal clients hang out?
                                     </h1>
                                     <p className="text-sm text-gray-500 mt-1">
-                                        Select all the platforms you want SignalReach to monitor.
+                                        Select at least one platform <span className="text-indigo-400 font-medium">and</span> your persona to continue.
                                     </p>
                                 </div>
 
@@ -318,37 +230,17 @@ export default function WelcomePage() {
                                                     : 'bg-[#F9FAFB] border-gray-200 hover:border-gray-300 hover:bg-white'
                                                     }`}
                                             >
-                                                {/* Check square */}
-                                                <div
-                                                    className={`w-5 h-5 rounded flex items-center justify-center border-2 shrink-0 transition-all duration-150 ${active
-                                                        ? 'bg-indigo-600 border-indigo-600'
-                                                        : 'bg-white border-gray-300'
-                                                        }`}
-                                                >
+                                                <div className={`w-5 h-5 rounded flex items-center justify-center border-2 shrink-0 transition-all ${active ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-gray-300'}`}>
                                                     {active && (
                                                         // @ts-expect-error custom element
-                                                        <iconify-icon
-                                                            icon="solar:check-read-linear"
-                                                            class="text-white text-[11px]"
-                                                        />
+                                                        <iconify-icon icon="solar:check-read-linear" class="text-white text-[11px]" />
                                                     )}
                                                 </div>
-
-                                                {/* Icon */}
                                                 <div className={`w-9 h-9 rounded-lg ${active ? p.bg : 'bg-gray-100'} flex items-center justify-center transition-colors`}>
                                                     {/* @ts-expect-error custom element */}
-                                                    <iconify-icon
-                                                        icon={p.icon}
-                                                        class={`text-xl ${active ? p.color : 'text-gray-400'}`}
-                                                    />
+                                                    <iconify-icon icon={p.icon} class={`text-xl ${active ? p.color : 'text-gray-400'}`} />
                                                 </div>
-
-                                                <span
-                                                    className={`text-sm font-medium ${active ? 'text-[#111827]' : 'text-gray-500'
-                                                        }`}
-                                                >
-                                                    {p.label}
-                                                </span>
+                                                <span className={`text-sm font-medium ${active ? 'text-[#111827]' : 'text-gray-500'}`}>{p.label}</span>
                                             </button>
                                         );
                                     })}
@@ -371,11 +263,23 @@ export default function WelcomePage() {
                                             </button>
                                         ))}
                                     </div>
+                                    {!step1Valid && (
+                                        <p className="text-[11px] text-amber-500 mt-2 flex items-center gap-1">
+                                            {/* @ts-expect-error custom element */}
+                                            <iconify-icon icon="solar:info-circle-linear" class="text-sm" />
+                                            {form.platforms.length === 0 && form.persona === null
+                                                ? 'Pick at least one platform and select your persona.'
+                                                : form.platforms.length === 0
+                                                    ? 'Pick at least one platform.'
+                                                    : 'Select your persona.'}
+                                        </p>
+                                    )}
                                 </div>
 
                                 <button
                                     onClick={() => setStep(2)}
-                                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm"
+                                    disabled={!step1Valid}
+                                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm"
                                 >
                                     Continue
                                     {/* @ts-expect-error custom element */}
@@ -384,84 +288,97 @@ export default function WelcomePage() {
                             </div>
                         )}
 
-                        {/* ── STEP 2 ──────────────────────────────────────────────────── */}
+                        {/* ── STEP 2 — Social Handles ────────────────────────────────────── */}
                         {step === 2 && (
                             <div className="flex flex-col gap-6">
                                 <div>
                                     <h1 className="text-xl font-semibold text-[#111827] tracking-tight">
-                                        Connect your profiles for silent tracking.
+                                        Connect your profiles.
                                     </h1>
                                     <p className="text-sm text-gray-500 mt-1">
-                                        We only read public data — no auth required.
+                                        Fill in the handle for each platform you selected.
                                     </p>
                                 </div>
 
                                 <div className="flex flex-col gap-4">
-                                    {/* Twitter */}
-                                    <div>
-                                        <label className={labelCls}>
-                                            {/* @ts-expect-error custom element */}
-                                            <iconify-icon icon="solar:twitter-linear" class="text-sky-400 mr-1.5 align-middle" />
-                                            Twitter Handle
-                                        </label>
-                                        <div className="relative">
-                                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400 select-none">@</span>
+                                    {/* Twitter — only show if selected */}
+                                    {form.platforms.includes('twitter') && (
+                                        <div>
+                                            <label className={labelCls}>
+                                                {/* @ts-expect-error custom element */}
+                                                <iconify-icon icon="solar:twitter-linear" class="text-sky-400 mr-1.5 align-middle" />
+                                                Twitter Handle <span className="text-red-400">*</span>
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400 select-none">@</span>
+                                                <input
+                                                    type="text"
+                                                    placeholder="yourhandle"
+                                                    value={form.twitterHandle}
+                                                    onChange={(e) => setForm((f) => ({ ...f, twitterHandle: e.target.value }))}
+                                                    className={`${inputCls} pl-8`}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Reddit — only show if selected */}
+                                    {form.platforms.includes('reddit') && (
+                                        <div>
+                                            <label className={labelCls}>
+                                                {/* @ts-expect-error custom element */}
+                                                <iconify-icon icon="solar:reddit-linear" class="text-orange-400 mr-1.5 align-middle" />
+                                                Reddit Username <span className="text-red-400">*</span>
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400 select-none">u/</span>
+                                                <input
+                                                    type="text"
+                                                    placeholder="yourusername"
+                                                    value={form.redditUsername}
+                                                    onChange={(e) => setForm((f) => ({ ...f, redditUsername: e.target.value }))}
+                                                    className={`${inputCls} pl-10`}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* LinkedIn — only show if selected */}
+                                    {form.platforms.includes('linkedin') && (
+                                        <div>
+                                            <label className={labelCls}>
+                                                {/* @ts-expect-error custom element */}
+                                                <iconify-icon icon="solar:linkedin-linear" class="text-blue-500 mr-1.5 align-middle" />
+                                                LinkedIn Profile URL <span className="text-red-400">*</span>
+                                            </label>
                                             <input
-                                                type="text"
-                                                placeholder="yourhandle"
-                                                value={form.twitterHandle}
-                                                onChange={(e) => setForm((f) => ({ ...f, twitterHandle: e.target.value }))}
-                                                className={`${inputCls} pl-8`}
+                                                type="url"
+                                                placeholder="https://linkedin.com/in/yourprofile"
+                                                value={form.linkedinUrl}
+                                                onChange={(e) => setForm((f) => ({ ...f, linkedinUrl: e.target.value }))}
+                                                className={inputCls}
                                             />
                                         </div>
-                                    </div>
-
-                                    {/* Reddit */}
-                                    <div>
-                                        <label className={labelCls}>
-                                            {/* @ts-expect-error custom element */}
-                                            <iconify-icon icon="solar:reddit-linear" class="text-orange-400 mr-1.5 align-middle" />
-                                            Reddit Username
-                                        </label>
-                                        <div className="relative">
-                                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400 select-none">u/</span>
-                                            <input
-                                                type="text"
-                                                placeholder="yourusername"
-                                                value={form.redditUsername}
-                                                onChange={(e) => setForm((f) => ({ ...f, redditUsername: e.target.value }))}
-                                                className={`${inputCls} pl-10`}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* LinkedIn */}
-                                    <div>
-                                        <label className={labelCls}>
-                                            {/* @ts-expect-error custom element */}
-                                            <iconify-icon icon="solar:linkedin-linear" class="text-blue-500 mr-1.5 align-middle" />
-                                            LinkedIn Profile URL
-                                        </label>
-                                        <input
-                                            type="url"
-                                            placeholder="https://linkedin.com/in/yourprofile"
-                                            value={form.linkedinUrl}
-                                            onChange={(e) => setForm((f) => ({ ...f, linkedinUrl: e.target.value }))}
-                                            className={inputCls}
-                                        />
-                                    </div>
+                                    )}
                                 </div>
 
+                                {!step2Valid && (
+                                    <p className="text-[11px] text-amber-500 flex items-center gap-1 -mt-2">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:info-circle-linear" class="text-sm" />
+                                        Fill in all required handles to continue.
+                                    </p>
+                                )}
+
                                 <div className="flex gap-3">
-                                    <button
-                                        onClick={() => setStep(1)}
-                                        className="px-4 py-2.5 text-sm font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200"
-                                    >
+                                    <button onClick={() => setStep(1)}
+                                        className="px-4 py-2.5 text-sm font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200">
                                         Back
                                     </button>
                                     <button
                                         onClick={() => setStep(3)}
-                                        className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm"
+                                        disabled={!step2Valid}
+                                        className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm"
                                     >
                                         Continue
                                         {/* @ts-expect-error custom element */}
@@ -471,7 +388,7 @@ export default function WelcomePage() {
                             </div>
                         )}
 
-                        {/* ── STEP 3 ──────────────────────────────────────────────────── */}
+                        {/* ── STEP 3 — Keywords ────────────────────────────────────────────── */}
                         {step === 3 && (
                             <div className="flex flex-col gap-6">
                                 <div>
@@ -510,16 +427,12 @@ export default function WelcomePage() {
                                         </button>
                                     </div>
 
-                                    {/* Tab A — URL */}
                                     {activeTab === 'url' && (
                                         <div className="flex flex-col gap-2">
                                             <label className={labelCls}>Your website URL</label>
                                             <div className="relative">
                                                 {/* @ts-expect-error custom element */}
-                                                <iconify-icon
-                                                    icon="solar:link-linear"
-                                                    class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-base"
-                                                />
+                                                <iconify-icon icon="solar:link-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-base" />
                                                 <input
                                                     type="url"
                                                     placeholder="https://yourproduct.com"
@@ -536,7 +449,6 @@ export default function WelcomePage() {
                                         </div>
                                     )}
 
-                                    {/* Tab B — Manual */}
                                     {activeTab === 'manual' && (
                                         <div className="flex flex-col gap-2">
                                             <label className={labelCls}>Target keywords</label>
@@ -551,7 +463,6 @@ export default function WelcomePage() {
                                         </div>
                                     )}
 
-                                    {/* Skip link */}
                                     <button
                                         onClick={() => router.push('/dashboard')}
                                         className="mt-4 text-xs text-gray-400 hover:text-indigo-500 transition-colors underline underline-offset-2 block"
@@ -561,14 +472,12 @@ export default function WelcomePage() {
                                 </div>
 
                                 <div className="flex gap-3">
-                                    <button
-                                        onClick={() => setStep(2)}
-                                        className="px-4 py-2.5 text-sm font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200"
-                                    >
+                                    <button onClick={() => setStep(2)}
+                                        className="px-4 py-2.5 text-sm font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200">
                                         Back
                                     </button>
                                     <button
-                                        onClick={handleFinish}
+                                        onClick={completeOnboarding}
                                         disabled={loading}
                                         className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm flex items-center justify-center gap-2"
                                     >
@@ -593,12 +502,10 @@ export default function WelcomePage() {
                 </div>
 
                 {/* Footer note */}
-                {step > 0 && (
-                    <p className="text-center text-xs text-gray-400 mt-5">
-                        You can change these settings anytime in{' '}
-                        <span className="text-indigo-500 font-medium">Settings → Integrations</span>.
-                    </p>
-                )}
+                <p className="text-center text-xs text-gray-400 mt-5">
+                    You can change these settings anytime in{' '}
+                    <span className="text-indigo-500 font-medium">Settings → Integrations</span>.
+                </p>
             </div>
         </div>
     );
