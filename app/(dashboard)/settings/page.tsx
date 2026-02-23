@@ -66,7 +66,7 @@ export default function SettingsPage() {
         setIsSaving(false);
     };
 
-    const inputCls = 'w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition';
+    const inputCls = 'w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:border-indigo-500 transition';
 
     return (
         <div className="flex flex-col gap-6 max-w-2xl">
@@ -84,8 +84,8 @@ export default function SettingsPage() {
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab
-                                ? 'border-indigo-600 text-indigo-600'
-                                : 'border-transparent text-gray-500 hover:text-gray-700'
+                            ? 'border-indigo-600 text-indigo-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
                             }`}
                     >
                         {tab}
@@ -106,7 +106,7 @@ export default function SettingsPage() {
                             type="email"
                             disabled
                             value={email}
-                            className="w-full text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 cursor-not-allowed"
+                            className="w-full text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 cursor-not-allowed opacity-50"
                         />
                     </div>
 

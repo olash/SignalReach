@@ -256,7 +256,7 @@ export default function InboxPage() {
                                     value={draftText}
                                     onChange={(e) => setDraftText(e.target.value)}
                                     placeholder={`Write or paste your reply to @${selected.author_handle} here…`}
-                                    className="flex-1 resize-none w-full text-sm text-gray-700 placeholder-gray-300 bg-gray-50 border border-gray-200 rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition leading-relaxed min-h-[140px]"
+                                    className="flex-1 resize-none w-full text-sm text-gray-700 placeholder-gray-300 bg-gray-50 border border-gray-200 rounded-xl p-4 focus:outline-none focus:ring-2 focus:border-indigo-500 transition leading-relaxed min-h-[140px]"
                                 />
                             </div>
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/AuthContext';
 
 type NavItem = {
     label: string;
@@ -33,6 +34,7 @@ const navItems: NavItem[] = [
 export default function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
+    const { user } = useAuth();
     const [openAccordion, setOpenAccordion] = useState<string | null>(null);
     const [loggingOut, setLoggingOut] = useState(false);
 
@@ -49,19 +51,28 @@ export default function Sidebar() {
         router.push('/');
     };
 
+    // ── Derive user display info ─────────────────────────────────────────────
+    const displayName =
+        (user?.user_metadata?.full_name as string | undefined) ||
+        user?.email?.split('@')[0] ||
+        'User';
+    const email = user?.email ?? '';
+    const initials = displayName
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase();
+
     return (
         <aside className="flex flex-col w-64 shrink-0 h-screen bg-white border-r border-gray-200 overflow-y-auto">
-            {/* Branding */}
-            <div className="flex items-center gap-2.5 px-5 py-5 border-b border-gray-100">
-                <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
-                    {/* @ts-expect-error custom element */}
-                    <iconify-icon icon="solar:radar-linear" class="text-white text-base" />
-                </div>
-                <span className="font-semibold text-[#111827] tracking-tight text-base">SignalReach</span>
+            {/* Branding — matches Dashboard.html logo block exactly */}
+            <div className="h-16 flex items-center px-6 border-b border-transparent">
+                <span className="font-extrabold tracking-tight text-lg text-gray-900 uppercase">SignalReach</span>
             </div>
 
-            {/* Navigation */}
-            <nav className="flex flex-col gap-0.5 px-3 py-4 flex-1">
+            {/* Navigation — matches Dashboard.html nav */}
+            <nav className="px-3 mt-6 space-y-1 flex-1">
                 {navItems.map((item) => {
                     if (item.children) {
                         const isOpen = openAccordion === item.label;
@@ -71,16 +82,16 @@ export default function Sidebar() {
                             <div key={item.label}>
                                 <button
                                     onClick={() => toggleAccordion(item.label)}
-                                    className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group ${anyChildActive
-                                            ? 'bg-indigo-50 text-indigo-600'
-                                            : 'text-gray-500 hover:bg-gray-50 hover:text-[#111827]'
+                                    className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 group ${anyChildActive
+                                        ? 'bg-gray-100 text-gray-900'
+                                        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
                                         }`}
                                 >
                                     <div className="flex items-center gap-3">
                                         {/* @ts-expect-error custom element */}
                                         <iconify-icon
                                             icon={item.icon}
-                                            class={`text-lg ${anyChildActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-600'}`}
+                                            class={`text-lg ${anyChildActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`}
                                         />
                                         {item.label}
                                     </div>
@@ -105,15 +116,15 @@ export default function Sidebar() {
                                                 key={`${child.href}-${child.label}`}
                                                 href={child.href}
                                                 prefetch={false}
-                                                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${pathname === child.href
-                                                        ? 'text-indigo-600 bg-indigo-50 font-medium'
-                                                        : 'text-gray-500 hover:text-[#111827] hover:bg-gray-50'
+                                                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-200 ${pathname === child.href
+                                                    ? 'text-gray-900 bg-gray-100 font-medium'
+                                                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
                                                     }`}
                                             >
                                                 {/* @ts-expect-error custom element */}
                                                 <iconify-icon
                                                     icon={child.icon}
-                                                    class={`text-base ${pathname === child.href ? 'text-indigo-600' : 'text-gray-400'}`}
+                                                    class={`text-base ${pathname === child.href ? 'text-blue-600' : 'text-gray-400'}`}
                                                 />
                                                 {child.label}
                                             </Link>
@@ -129,15 +140,15 @@ export default function Sidebar() {
                             key={item.href}
                             href={item.href!}
                             prefetch={false}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group ${isActive(item.href)
-                                    ? 'bg-indigo-50 text-indigo-600'
-                                    : 'text-gray-500 hover:bg-gray-50 hover:text-[#111827]'
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 group ${isActive(item.href)
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
                                 }`}
                         >
                             {/* @ts-expect-error custom element */}
                             <iconify-icon
                                 icon={item.icon}
-                                class={`text-lg ${isActive(item.href) ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-600'}`}
+                                class={`text-lg ${isActive(item.href) ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`}
                             />
                             {item.label}
                         </Link>
@@ -145,15 +156,15 @@ export default function Sidebar() {
                 })}
             </nav>
 
-            {/* User Footer */}
-            <div className="px-3 py-4 border-t border-gray-100 flex flex-col gap-1">
-                <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
-                    <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-semibold shrink-0">
-                        SR
+            {/* User Profile & Status — mirrors Dashboard.html bottom panel */}
+            <div className="p-5 border-t border-gray-100">
+                <div className="flex items-center gap-3 mb-4 cursor-pointer group">
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-blue-100 to-blue-200 flex items-center justify-center text-blue-700 font-bold text-xs shadow-sm group-hover:shadow transition-shadow shrink-0">
+                        {initials}
                     </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-[#111827] truncate">Sarah Reynolds</p>
-                        <p className="text-[10px] text-gray-400 truncate">sarah@acmecorp.io</p>
+                    <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
+                        <p className="text-xs text-gray-500 truncate">{email}</p>
                     </div>
                 </div>
 

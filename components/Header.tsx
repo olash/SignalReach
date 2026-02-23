@@ -47,7 +47,7 @@ export default function Header() {
         : '…';
 
     return (
-        <header className="h-14 shrink-0 flex items-center justify-between bg-white border-b border-gray-200 px-5 z-30">
+        <header className="h-16 shrink-0 flex items-center justify-between backdrop-blur-md bg-white/70 border-b border-gray-200 px-6 z-30">
 
             {/* ── Workspace Switcher ────────────────────────────────────────── */}
             <div className="relative" ref={wsRef}>
