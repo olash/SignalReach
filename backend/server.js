@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { ApifyClient } = require('apify-client');
+const { createClient } = require('@supabase/supabase-js');
 
 // ── Environment ──────────────────────────────────────────────────────────────
 dotenv.config();
@@ -15,6 +17,15 @@ if (!GEMINI_API_KEY) {
     console.error('[SignalReach] ❌  GEMINI_API_KEY is not set. Check your .env file.');
     process.exit(1);
 }
+
+// ── Apify client ─────────────────────────────────────────────────────────────
+const apify = new ApifyClient({ token: process.env.APIFY_API_TOKEN });
+
+// ── Supabase admin client (service-role — bypasses RLS for backend use only) ─
+const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // ── Gemini client ────────────────────────────────────────────────────────────
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -97,12 +108,124 @@ Rules:
     return prompt;
 }
 
+// ── Cron secret guard ────────────────────────────────────────────────────────
+
+/**
+ * Middleware: require Authorization: Bearer <CRON_SECRET> header.
+ * Returns 401 if missing or wrong — protects the scrape endpoint from
+ * being triggered by anyone other than the authorised cron caller.
+ */
+function requireCronSecret(req, res, next) {
+    const authHeader = req.headers['authorization'] ?? '';
+    const [scheme, token] = authHeader.split(' ');
+    if (scheme !== 'Bearer' || token !== process.env.CRON_SECRET) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 /**
- * GET /
- * Health check — keeps the Render dyno awake.
+ * POST /api/cron/scrape
+ * Headers: Authorization: Bearer <CRON_SECRET>
+ *
+ * For every workspace with non-null keywords:
+ *  1. Runs the Apify Reddit scraper with those keywords.
+ *  2. Maps the results to the `leads` schema.
+ *  3. Upserts them into public.leads.
+ *
+ * Designed to be called by a cron service (e.g. Vercel Cron, GitHub Actions).
  */
+app.post('/api/cron/scrape', requireCronSecret, async (_req, res) => {
+    console.log('[cron/scrape] 🕐  Run started at', new Date().toISOString());
+
+    // 1 ── Fetch all workspaces that have keywords configured
+    const { data: workspaces, error: wsErr } = await supabaseAdmin
+        .from('workspaces')
+        .select('id, keywords')
+        .not('keywords', 'is', null);
+
+    if (wsErr) {
+        console.error('[cron/scrape] ❌  Failed to fetch workspaces:', wsErr.message);
+        return res.status(500).json({ error: 'Failed to fetch workspaces', detail: wsErr.message });
+    }
+
+    if (!workspaces || workspaces.length === 0) {
+        console.log('[cron/scrape] ℹ️  No workspaces with keywords found. Nothing to scrape.');
+        return res.json({ inserted: 0, workspaces_scraped: 0 });
+    }
+
+    let totalInserted = 0;
+    let workspacesScraped = 0;
+
+    // 2 ── Process each workspace independently — one failure won't stop the rest
+    await Promise.allSettled(
+        workspaces.map(async (workspace) => {
+            try {
+                const keywords = workspace.keywords.trim();
+                if (!keywords) return;
+
+                console.log(`[cron/scrape] 🔍  Scraping for workspace ${workspace.id}: "${keywords}"`);
+
+                // 2a ── Start the Apify Reddit scraper run
+                const run = await apify.actor('trudax/reddit-scraper').call({
+                    searchQueries: [keywords],
+                    maxItems: 10,
+                }, { waitSecs: 120 }); // wait up to 2 min for run to finish
+
+                // 2b ── Fetch the dataset items from the completed run
+                const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+
+                if (!items || items.length === 0) {
+                    console.log(`[cron/scrape] ℹ️  No results for workspace ${workspace.id}`);
+                    return;
+                }
+
+                // 2c ── Map items to the leads table schema
+                const leads = items
+                    .filter((item) => item.body || item.title) // skip empty posts
+                    .map((item) => ({
+                        workspace_id: workspace.id,
+                        platform: 'reddit',
+                        author_handle: item.author ?? 'unknown',
+                        post_content: (item.body || item.title || '').slice(0, 5000),
+                        post_url: item.url ?? item.permalink ?? null,
+                        status: 'new',
+                    }));
+
+                if (leads.length === 0) return;
+
+                // 2d ── Insert into public.leads
+                const { error: insertErr, count } = await supabaseAdmin
+                    .from('leads')
+                    .insert(leads, { count: 'exact' });
+
+                if (insertErr) {
+                    console.error(`[cron/scrape] ❌  Insert failed for workspace ${workspace.id}:`, insertErr.message);
+                    return;
+                }
+
+                const inserted = count ?? leads.length;
+                totalInserted += inserted;
+                workspacesScraped += 1;
+                console.log(`[cron/scrape] ✅  Inserted ${inserted} leads for workspace ${workspace.id}`);
+
+            } catch (err) {
+                console.error(`[cron/scrape] ❌  Error processing workspace ${workspace.id}:`, err?.message ?? err);
+            }
+        })
+    );
+
+    console.log(`[cron/scrape] 🏁  Done. ${totalInserted} leads inserted across ${workspacesScraped} workspace(s).`);
+    return res.json({
+        ok: true,
+        inserted: totalInserted,
+        workspaces_scraped: workspacesScraped,
+    });
+});
+
+// ── 404 catch-all ────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
     res.json({ status: 'SignalReach Gateway Active' });
 });

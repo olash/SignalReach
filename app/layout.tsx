@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import Script from "next/script";
-import { AuthProvider } from "@/lib/AuthContext";
+import { AuthProvider } from "@/components/AuthContext";
 
 export const metadata: Metadata = {
     title: "SignalReach | Intent-Based Outreach",

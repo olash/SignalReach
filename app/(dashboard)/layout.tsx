@@ -1,6 +1,6 @@
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
-import { AuthGate } from "@/lib/AuthContext";
+import { AuthGate } from "@/components/AuthContext";
 
 export default function DashboardLayout({
     children,
