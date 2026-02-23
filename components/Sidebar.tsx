@@ -17,7 +17,6 @@ type NavItem = {
 const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/dashboard', icon: 'solar:home-2-linear' },
     { label: 'Signals', href: '/signals', icon: 'solar:radar-linear' },
-    { label: 'Pipelines', href: '/pipelines', icon: 'solar:chart-2-linear' },
     { label: 'Inbox', href: '/inbox', icon: 'solar:inbox-linear' },
     {
         label: 'Settings',

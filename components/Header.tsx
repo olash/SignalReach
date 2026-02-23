@@ -93,7 +93,10 @@ export default function Header() {
                         ))}
                         <div className="border-t border-gray-100 mt-1 pt-1">
                             <button
-                                onClick={() => toast('Workspace creation coming soon!', { icon: '🏢' })}
+                                onClick={() => {
+                                    setWorkspaceOpen(false);
+                                    router.push('/welcome?new=true');
+                                }}
                                 className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 hover:text-[#111827] transition-colors"
                             >
                                 {/* @ts-expect-error custom element */}

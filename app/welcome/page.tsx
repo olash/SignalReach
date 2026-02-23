@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -40,11 +40,15 @@ const labelCls = 'block text-xs font-medium text-gray-500 mb-1.5';
 
 export default function WelcomePage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const isNew = searchParams.get('new') === 'true';
+
     // Start at step 1 directly — auth already handled by AuthContext
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'url' | 'manual'>('url');
     const [sessionChecked, setSessionChecked] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false);
 
     const [form, setForm] = useState<FormState>({
         platforms: [],
@@ -64,6 +68,10 @@ export default function WelcomePage() {
                 router.replace('/dashboard'); // AuthGate will show login
                 return;
             }
+            if (isNew) {
+                setSessionChecked(true);
+                return;
+            }
             // If user already has a workspace, skip onboarding
             const { data: ws } = await supabase
                 .from('workspaces')
@@ -77,7 +85,14 @@ export default function WelcomePage() {
             }
             setSessionChecked(true);
         });
-    }, [router]);
+    }, [router, isNew]);
+
+    // ── Redirect on Success ──────────
+    useEffect(() => {
+        if (isSuccess) {
+            router.push('/dashboard');
+        }
+    }, [isSuccess, router]);
 
     // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -157,7 +172,7 @@ export default function WelcomePage() {
                 headers: { 'Authorization': 'Bearer signalreach_cron_99x!' },
             }).catch((err) => console.error('[onboarding] Background scrape trigger failed:', err));
 
-            router.push('/dashboard');
+            setIsSuccess(true);
         } catch (err) {
             console.error('[onboarding]', err);
             toast.error('Could not save your setup. Please try again.');

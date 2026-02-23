@@ -130,10 +130,23 @@ export default function InboxPage() {
             toast.error('Write your reply first!');
             return;
         }
+        if (!selected) return;
+
         setSending(true);
-        await new Promise((r) => setTimeout(r, 900)); // simulate network
+
+        const { error } = await supabase
+            .from('signals')
+            .update({ status: 'replied' })
+            .eq('id', selected.id);
+
+        if (error) {
+            toast.error('Failed to send reply');
+            setSending(false);
+            return;
+        }
+
         toast.success('Reply sent! Lead moved to Engaged. ✅');
-        setLeads((prev) => prev.filter((l) => l.id !== selected?.id));
+        setLeads((prev) => prev.filter((l) => l.id !== selected.id));
         setSelected(null);
         setDraftText('');
         setSending(false);

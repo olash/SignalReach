@@ -6,10 +6,10 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthContext';
 import { useWorkspace } from '@/components/WorkspaceContext';
 
-type Tab = 'Account' | 'Profiles' | 'Integrations' | 'Billing';
+type Tab = 'Account' | 'Profiles' | 'Pipelines' | 'Billing';
 type Frequency = '6h' | '24h' | '7d';
 
-const TABS: Tab[] = ['Account', 'Profiles', 'Integrations', 'Billing'];
+const TABS: Tab[] = ['Account', 'Profiles', 'Pipelines', 'Billing'];
 const FREQ_OPTS: { value: Frequency; label: string; desc: string }[] = [
     { value: '6h', label: 'Every 6 hours', desc: 'Active campaigns' },
     { value: '24h', label: 'Daily', desc: 'Recommended' },
@@ -31,14 +31,17 @@ export default function SettingsPage() {
     const [origName, setOrigName] = useState('');
     const [savingName, setSavingName] = useState(false);
 
-    // Profiles
+    // Profiles - Track current vs original
     const [twitter, setTwitter] = useState('');
     const [reddit, setReddit] = useState('');
     const [linkedin, setLinkedin] = useState('');
+    const [origTwitter, setOrigTwitter] = useState('');
+    const [origReddit, setOrigReddit] = useState('');
+    const [origLinkedin, setOrigLinkedin] = useState('');
     const [savingProfiles, setSavingProfiles] = useState(false);
     const [loadingProfiles, setLoadingProfiles] = useState(true);
 
-    // Integrations
+    // Pipelines (formerly Integrations)
     const [keywords, setKeywords] = useState<string[]>([]);
     const [kwInput, setKwInput] = useState('');
     const [freq, setFreq] = useState<Frequency>('24h');
@@ -56,9 +59,10 @@ export default function SettingsPage() {
         const { data } = await supabase.from('social_profiles').select('platform,handle').eq('user_id', user.id);
         if (data) {
             data.forEach((r: { platform: string; handle: string }) => {
-                if (r.platform === 'twitter') setTwitter(r.handle);
-                if (r.platform === 'reddit') setReddit(r.handle);
-                if (r.platform === 'linkedin') setLinkedin(r.handle);
+                const h = r.handle || '';
+                if (r.platform === 'twitter') { setTwitter(h); setOrigTwitter(h); }
+                if (r.platform === 'reddit') { setReddit(h); setOrigReddit(h); }
+                if (r.platform === 'linkedin') { setLinkedin(h); setOrigLinkedin(h); }
             });
         }
         setLoadingProfiles(false);
@@ -86,16 +90,32 @@ export default function SettingsPage() {
     const saveProfiles = async () => {
         if (!user) return;
         setSavingProfiles(true);
-        const rows = [
-            { platform: 'twitter', handle: twitter.trim() },
-            { platform: 'reddit', handle: reddit.trim() },
-            { platform: 'linkedin', handle: linkedin.trim() },
-        ].filter(p => p.handle);
-        const results = await Promise.all(rows.map(p =>
-            supabase.from('social_profiles').upsert({ user_id: user.id, platform: p.platform, handle: p.handle }, { onConflict: 'user_id, platform' })
-        ));
-        const failed = results.find(r => r.error);
-        if (failed?.error) toast.error('Failed to save profiles.'); else toast.success('Social profiles saved!');
+
+        const rowsToUpdate = [];
+        if (twitter.trim() !== origTwitter) rowsToUpdate.push({ platform: 'twitter', handle: twitter.trim() });
+        if (reddit.trim() !== origReddit) rowsToUpdate.push({ platform: 'reddit', handle: reddit.trim() });
+        if (linkedin.trim() !== origLinkedin) rowsToUpdate.push({ platform: 'linkedin', handle: linkedin.trim() });
+
+        if (rowsToUpdate.length > 0) {
+            const results = await Promise.all(rowsToUpdate.map(p =>
+                supabase.from('social_profiles').upsert({
+                    user_id: user.id,
+                    workspace_id: activeWorkspace?.id ?? null,
+                    platform: p.platform,
+                    handle: p.handle
+                }, { onConflict: 'user_id, platform' })
+            ));
+            const failed = results.find(r => r.error);
+            if (failed?.error) {
+                toast.error('Failed to save profiles.');
+                console.error(failed.error);
+            } else {
+                toast.success('Social handles saved!');
+                setOrigTwitter(twitter.trim());
+                setOrigReddit(reddit.trim());
+                setOrigLinkedin(linkedin.trim());
+            }
+        }
         setSavingProfiles(false);
     };
 
@@ -133,6 +153,8 @@ export default function SettingsPage() {
             </button>
         </div>
     );
+
+    const profilesChanged = twitter.trim() !== origTwitter || reddit.trim() !== origReddit || linkedin.trim() !== origLinkedin;
 
     return (
         <div className="flex flex-col gap-6 max-w-2xl">
@@ -201,14 +223,14 @@ export default function SettingsPage() {
                                 <label className={labelCls}>LinkedIn URL</label>
                                 <input type="url" placeholder="https://linkedin.com/in/you" value={linkedin} onChange={e => setLinkedin(e.target.value)} className={inputCls} />
                             </div>
-                            <SaveBtn onClick={saveProfiles} busy={savingProfiles} label="Save Profiles" busyLabel="Saving…" />
+                            <SaveBtn onClick={saveProfiles} busy={savingProfiles} disabled={!profilesChanged} label="Save Profiles" busyLabel="Saving…" />
                         </>
                     )}
                 </div>
             )}
 
-            {/* ── INTEGRATIONS ── */}
-            {tab === 'Integrations' && (
+            {/* ── PIPELINES ── */}
+            {tab === 'Pipelines' && (
                 <>
                     {loadingInt ? (
                         <div className="flex flex-col gap-4 animate-pulse">{[1, 2].map(i => <div key={i} className="h-32 bg-white border border-gray-200 rounded-xl" />)}</div>
@@ -274,7 +296,7 @@ export default function SettingsPage() {
                                     className="flex items-center gap-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed px-6 py-2.5 rounded-xl shadow-sm transition-all">
                                     {/* @ts-expect-error custom element */}
                                     <iconify-icon icon={savingInt ? 'solar:refresh-linear' : 'solar:diskette-linear'} class={`text-base ${savingInt ? 'animate-spin' : ''}`} />
-                                    {savingInt ? 'Saving…' : 'Save Integration Settings'}
+                                    {savingInt ? 'Saving…' : 'Save Pipeline Settings'}
                                 </button>
                             </div>
                         </>
