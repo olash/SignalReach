@@ -176,12 +176,13 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
                 // 2a ── Start the Apify Reddit scraper run
                 const input = {
                     "searches": [keywords],
-                    "sort": "new",
-                    "time": "week",
                     "maxItems": 15,
-                    "extendOutputFunction": "($) => { return {} }"
+                    "maxPostCount": 15,
+                    "maxComments": 0,
+                    "maxCommunitiesCount": 0,
+                    "maxUserCount": 0
                 };
-                const run = await apify.actor('mstephen190/reddit-scraper').call(input, { waitSecs: 120 }); // wait up to 2 min for run to finish
+                const run = await apify.actor('trudax/reddit-scraper-lite').call(input, { waitSecs: 120 }); // wait up to 2 min for run to finish
 
                 // 2b ── Fetch the dataset items from the completed run
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
@@ -197,7 +198,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
                     .map((item) => ({
                         workspace_id: workspace.id,
                         platform: 'reddit',
-                        author_handle: item.author || 'Unknown',
+                        author_handle: item.username || item.author || 'Unknown',
                         post_content: (item.body || item.title || 'No content').slice(0, 5000),
                         post_url: item.url,
                         status: 'new'
