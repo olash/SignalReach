@@ -137,7 +137,8 @@ function requireCronSecret(req, res, next) {
  *
  * Designed to be called by a cron service (e.g. Vercel Cron, GitHub Actions).
  */
-app.post('/api/cron/scrape', requireCronSecret, async (_req, res) => {
+app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
+    console.log('🤖 Scrape endpoint triggered!');
     console.log('[cron/scrape] 🕐  Run started at', new Date().toISOString());
 
     // 1 ── Fetch all workspaces that have keywords configured
@@ -146,12 +147,15 @@ app.post('/api/cron/scrape', requireCronSecret, async (_req, res) => {
         .select('id, keywords')
         .not('keywords', 'is', null);
 
+    console.log('📊 Workspaces found:', workspaces?.length || 0);
+
     if (wsErr) {
         console.error('[cron/scrape] ❌  Failed to fetch workspaces:', wsErr.message);
         return res.status(500).json({ error: 'Failed to fetch workspaces', detail: wsErr.message });
     }
 
     if (!workspaces || workspaces.length === 0) {
+        console.log('⚠️ No workspaces with keywords found. Exiting.');
         console.log('[cron/scrape] ℹ️  No workspaces with keywords found. Nothing to scrape.');
         return res.json({ inserted: 0, workspaces_scraped: 0 });
     }
@@ -168,6 +172,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (_req, res) => {
 
                 console.log(`[cron/scrape] 🔍  Scraping for workspace ${workspace.id}: "${keywords}"`);
 
+                console.log('🚀 Calling Apify for workspace:', workspace.id, 'with keywords:', workspace.keywords);
                 // 2a ── Start the Apify Reddit scraper run
                 const run = await apify.actor('trudax/reddit-scraper').call({
                     searchQueries: [keywords],
@@ -212,6 +217,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (_req, res) => {
                 console.log(`[cron/scrape] ✅  Inserted ${inserted} signals for workspace ${workspace.id}`);
 
             } catch (err) {
+                console.error('❌ Apify Error:', err.message);
                 console.error(`[cron/scrape] ❌  Error processing workspace ${workspace.id}:`, err?.message ?? err);
             }
         })
