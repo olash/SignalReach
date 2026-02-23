@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
@@ -20,8 +20,9 @@ interface FormState {
     keywords: string;
 }
 
-// ─── Progress bar widths per step ────────────────────────────────────────────
+// ─── Progress bar widths per step (step 0 = no fill) ─────────────────────────
 const STEP_PROGRESS: Record<number, string> = {
+    0: 'w-0',
     1: 'w-1/3',
     2: 'w-2/3',
     3: 'w-full',
@@ -44,9 +45,16 @@ const labelCls = 'block text-xs font-medium text-gray-500 mb-1.5';
 
 export default function WelcomePage() {
     const router = useRouter();
-    const [step, setStep] = useState(1);
+    // step 0 = sign-up gate, 1–3 = onboarding steps
+    const [step, setStep] = useState(0);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'url' | 'manual'>('url');
+
+    // Step 0 state
+    const [email, setEmail] = useState('');
+    const [signupBusy, setSignupBusy] = useState(false);
+    const [magicSent, setMagicSent] = useState(false);
+    const [sessionChecked, setSessionChecked] = useState(false);
 
     const [form, setForm] = useState<FormState>({
         platforms: [],
@@ -57,6 +65,50 @@ export default function WelcomePage() {
         websiteUrl: '',
         keywords: '',
     });
+
+    // ── Detect existing / new session and auto-advance past step 0 ───────────
+
+    useEffect(() => {
+        // Check for an existing session on mount
+        supabase.auth.getSession().then(({ data }) => {
+            setSessionChecked(true);
+            if (data.session) {
+                setStep(1); // already logged in → skip sign-up gate
+            }
+        });
+
+        // Listen for auth changes (e.g. magic link confirmed in same tab)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session && step === 0) {
+                setStep(1);
+            }
+        });
+
+        return () => subscription.unsubscribe();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ── Step 0 — Send Magic Link ──────────────────────────────────────────────
+
+    const handleMagicLink = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email.trim()) return;
+        setSignupBusy(true);
+        const { error } = await supabase.auth.signInWithOtp({
+            email: email.trim(),
+            options: {
+                // When the user clicks the link in their email, the session
+                // is established and onAuthStateChange fires, advancing to step 1.
+                emailRedirectTo: window.location.href,
+            },
+        });
+        setSignupBusy(false);
+        if (error) {
+            toast.error(error.message);
+        } else {
+            setMagicSent(true);
+        }
+    };
 
     // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -126,16 +178,34 @@ export default function WelcomePage() {
         }
     };
 
+    // ── Loading shimmer while we check for an existing session ───────────────
+
+    if (!sessionChecked) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
+                {/* @ts-expect-error custom element */}
+                <iconify-icon icon="solar:spinner-linear" class="text-3xl text-indigo-500 animate-spin" />
+            </div>
+        );
+    }
+
     // ── Render ────────────────────────────────────────────────────────────────
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] px-4 py-12">
             <div className="w-full max-w-lg">
 
+                {/* Logo */}
+                <div className="flex items-center justify-center gap-2 mb-8">
+                    {/* @ts-expect-error custom element */}
+                    <iconify-icon icon="solar:radar-linear" class="text-2xl text-indigo-600" />
+                    <span className="text-lg font-semibold text-gray-900 tracking-tight">SignalReach</span>
+                </div>
+
                 {/* Card */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
 
-                    {/* Progress bar */}
+                    {/* Progress bar — hidden on step 0 */}
                     <div className="h-1.5 bg-gray-100 w-full">
                         <div
                             className={`h-full bg-indigo-600 transition-all duration-500 ease-out ${STEP_PROGRESS[step]}`}
@@ -144,10 +214,84 @@ export default function WelcomePage() {
 
                     <div className="px-8 pt-8 pb-9">
 
-                        {/* Step indicator */}
-                        <p className="text-[11px] font-semibold uppercase tracking-widest text-indigo-500 mb-1">
-                            Step {step} of 3
-                        </p>
+                        {/* Step indicator — only shown once onboarding starts */}
+                        {step > 0 && (
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-indigo-500 mb-1">
+                                Step {step} of 3
+                            </p>
+                        )}
+
+                        {/* ── STEP 0 — Sign-Up Gate ────────────────────────────────────── */}
+                        {step === 0 && (
+                            <div className="flex flex-col gap-6">
+                                <div>
+                                    <h1 className="text-xl font-semibold text-[#111827] tracking-tight">
+                                        Create your free account
+                                    </h1>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        We&apos;ll send you a magic link — no password required.
+                                    </p>
+                                </div>
+
+                                {magicSent ? (
+                                    <div className="flex flex-col items-center gap-3 py-6 text-center">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:letter-opened-linear" class="text-5xl text-indigo-500" />
+                                        <p className="text-sm font-medium text-gray-900">Check your inbox</p>
+                                        <p className="text-xs text-gray-500 max-w-xs">
+                                            We sent a magic link to{' '}
+                                            <span className="font-medium text-gray-700">{email}</span>.
+                                            Click it and you&apos;ll land right back here, signed in.
+                                        </p>
+                                        <button
+                                            onClick={() => setMagicSent(false)}
+                                            className="text-xs text-indigo-500 hover:text-indigo-700 underline underline-offset-2 transition-colors mt-1"
+                                        >
+                                            Try a different email
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <form onSubmit={handleMagicLink} className="flex flex-col gap-4">
+                                        <div>
+                                            <label className={labelCls}>Email address</label>
+                                            <input
+                                                type="email"
+                                                required
+                                                autoFocus
+                                                placeholder="you@company.com"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                className={inputCls}
+                                            />
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={signupBusy}
+                                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98] text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm flex items-center justify-center gap-2"
+                                        >
+                                            {signupBusy ? (
+                                                /* @ts-expect-error custom element */
+                                                <iconify-icon icon="solar:spinner-linear" class="text-base animate-spin" />
+                                            ) : (
+                                                /* @ts-expect-error custom element */
+                                                <iconify-icon icon="solar:letter-linear" class="text-base" />
+                                            )}
+                                            {signupBusy ? 'Sending…' : 'Send Magic Link'}
+                                        </button>
+                                    </form>
+                                )}
+
+                                <p className="text-center text-xs text-gray-400">
+                                    Already have an account?{' '}
+                                    <a
+                                        href="/dashboard"
+                                        className="text-indigo-500 hover:text-indigo-700 font-medium underline underline-offset-2 transition-colors"
+                                    >
+                                        Sign in
+                                    </a>
+                                </p>
+                            </div>
+                        )}
 
                         {/* ── STEP 1 ──────────────────────────────────────────────────── */}
                         {step === 1 && (
@@ -387,7 +531,7 @@ export default function WelcomePage() {
                                             <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                                                 {/* @ts-expect-error custom element */}
                                                 <iconify-icon icon="solar:magic-stick-3-linear" class="text-indigo-400" />
-                                                We'll scan your homepage and auto-suggest the best keywords.
+                                                We&apos;ll scan your homepage and auto-suggest the best keywords.
                                             </p>
                                         </div>
                                     )}
@@ -408,7 +552,10 @@ export default function WelcomePage() {
                                     )}
 
                                     {/* Skip link */}
-                                    <button className="mt-4 text-xs text-gray-400 hover:text-indigo-500 transition-colors underline underline-offset-2 block">
+                                    <button
+                                        onClick={() => router.push('/dashboard')}
+                                        className="mt-4 text-xs text-gray-400 hover:text-indigo-500 transition-colors underline underline-offset-2 block"
+                                    >
                                         Skip for now &amp; use a Template
                                     </button>
                                 </div>
@@ -446,10 +593,12 @@ export default function WelcomePage() {
                 </div>
 
                 {/* Footer note */}
-                <p className="text-center text-xs text-gray-400 mt-5">
-                    You can change these settings anytime in{' '}
-                    <span className="text-indigo-500 font-medium">Settings → Integrations</span>.
-                </p>
+                {step > 0 && (
+                    <p className="text-center text-xs text-gray-400 mt-5">
+                        You can change these settings anytime in{' '}
+                        <span className="text-indigo-500 font-medium">Settings → Integrations</span>.
+                    </p>
+                )}
             </div>
         </div>
     );
