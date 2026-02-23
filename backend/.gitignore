@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Secrets — NEVER commit this
+.env
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
