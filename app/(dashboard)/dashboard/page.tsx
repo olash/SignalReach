@@ -1,36 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import toast from 'react-hot-toast';
 import AIActionPanel from '@/components/AIActionPanel';
+import { supabase } from '@/lib/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Platform = 'all' | 'reddit' | 'twitter' | 'linkedin';
+type LeadStatus = 'new' | 'drafted' | 'replied' | 'dismissed';
 
-interface Signal {
+interface Lead {
     id: string;
+    workspace_id: string;
     platform: 'reddit' | 'twitter' | 'linkedin';
-    platformIcon: string;
-    platformColor: string;
-    source: string;
-    excerpt: string;
-    intent: 'hot' | 'warm';
-    score: number;
-    timeAgo: string;
-    blurred?: boolean;
-}
-
-interface EngagedCard {
-    id: string;
-    platform: 'reddit' | 'twitter' | 'linkedin';
-    platformIcon: string;
-    platformColor: string;
-    source: string;
-    excerpt: string;
-    replies: number;
-    timeAgo: string;
-    status: string;
+    author_handle: string;
+    post_content: string;
+    post_url: string | null;
+    status: LeadStatus;
 }
 
 interface PanelProspect {
@@ -39,49 +27,64 @@ interface PanelProspect {
     originalPost: string;
 }
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+// ─── Column configuration ────────────────────────────────────────────────────
 
-const NEW_SIGNALS: Signal[] = [
-    {
-        id: 's1', platform: 'reddit', platformIcon: 'solar:reddit-linear', platformColor: 'text-orange-500',
-        source: 'r/SaaS',
-        excerpt: '"Looking for alternatives to generic CRMs for my sales team — any recommendations that track intent?"',
-        intent: 'hot', score: 97, timeAgo: '2 min ago',
-    },
-    {
-        id: 's2', platform: 'twitter', platformIcon: 'solar:twitter-linear', platformColor: 'text-sky-500',
-        source: '@founder_mikk',
-        excerpt: '"Tired of cold email tools that just spray-and-pray. Is there a better way to find buyers who are already looking?"',
-        intent: 'warm', score: 83, timeAgo: '11 min ago',
-    },
-    {
-        id: 's3', platform: 'linkedin', platformIcon: 'solar:linkedin-linear', platformColor: 'text-blue-600',
-        source: 'LinkedIn Post',
-        excerpt: '"Our sales team is evaluating new prospecting tools this quarter. Would love to hear what\'s working."',
-        intent: 'warm', score: 71, timeAgo: '34 min ago', blurred: true,
-    },
-];
+const COLUMN_CONFIG: {
+    id: LeadStatus;
+    title: string;
+    icon: string;
+    accent: string;
+    emptyMsg: string;
+    emptySubMsg: string;
+    emptyIcon: string;
+}[] = [
+        {
+            id: 'new',
+            title: 'New Signals',
+            icon: 'solar:radar-linear',
+            accent: 'text-indigo-500',
+            emptyMsg: 'No signals yet.',
+            emptySubMsg: 'Run the scraper to fetch leads from Reddit.',
+            emptyIcon: 'solar:radar-linear',
+        },
+        {
+            id: 'drafted',
+            title: 'Action Required',
+            icon: 'solar:bell-bing-linear',
+            accent: 'text-amber-500',
+            emptyMsg: 'No drafts pending.',
+            emptySubMsg: 'AI replies waiting for your approval will appear here.',
+            emptyIcon: 'solar:magic-stick-3-linear',
+        },
+        {
+            id: 'replied',
+            title: 'Engaged',
+            icon: 'solar:chat-round-dots-linear',
+            accent: 'text-emerald-500',
+            emptyMsg: 'No engaged leads.',
+            emptySubMsg: "Move cards here after you've sent your reply.",
+            emptyIcon: 'solar:chat-round-dots-linear',
+        },
+        {
+            id: 'dismissed',
+            title: 'Archive / Closed',
+            icon: 'solar:archive-linear',
+            accent: 'text-gray-400',
+            emptyMsg: 'Archive is empty.',
+            emptySubMsg: 'Drop cards here to clear your board.',
+            emptyIcon: 'solar:archive-linear',
+        },
+    ];
 
-const ENGAGED_CARDS: EngagedCard[] = [
-    {
-        id: 'e1', platform: 'reddit', platformIcon: 'solar:reddit-linear', platformColor: 'text-orange-500',
-        source: 'r/Entrepreneur',
-        excerpt: '"Great point! We actually built SignalReach to solve exactly this — tracking intent without the spam."',
-        replies: 3, timeAgo: '1 hr ago', status: 'Awaiting reply',
-    },
-];
+// ─── Platform metadata ───────────────────────────────────────────────────────
 
-const ARCHIVE_CARDS = [
-    { id: 'a1', excerpt: '"Found a solution, thanks everyone!"', timeAgo: '2 days ago' },
-    { id: 'a2', excerpt: '"Already went with a competitor, but bookmarked this."', timeAgo: '4 days ago' },
-];
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
-const intentConfig = {
-    hot: { label: 'Hot', cls: 'bg-red-100 text-red-600 border-red-200' },
-    warm: { label: 'Warm', cls: 'bg-amber-100 text-amber-600 border-amber-200' },
+const PLATFORM_META: Record<string, { icon: string; color: string }> = {
+    reddit: { icon: 'solar:reddit-linear', color: 'text-orange-500' },
+    twitter: { icon: 'solar:twitter-linear', color: 'text-sky-500' },
+    linkedin: { icon: 'solar:linkedin-linear', color: 'text-blue-600' },
 };
+
+// ─── Platform filter bar ─────────────────────────────────────────────────────
 
 const platformFilters: { id: Platform; label: string; icon: string }[] = [
     { id: 'all', label: 'All', icon: 'solar:tuning-linear' },
@@ -90,11 +93,14 @@ const platformFilters: { id: Platform; label: string; icon: string }[] = [
     { id: 'linkedin', label: 'LinkedIn', icon: 'solar:linkedin-linear' },
 ];
 
-function PlatformBadge({ icon, color, source }: { icon: string; color: string; source: string }) {
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function PlatformBadge({ platform, source }: { platform: string; source: string }) {
+    const meta = PLATFORM_META[platform] ?? { icon: 'solar:global-linear', color: 'text-gray-400' };
     return (
         <div className="flex items-center gap-1.5">
             {/* @ts-expect-error custom element */}
-            <iconify-icon icon={icon} class={`text-base ${color}`} />
+            <iconify-icon icon={meta.icon} class={`text-base ${meta.color}`} />
             <span className="text-xs text-gray-400 font-medium">{source}</span>
         </div>
     );
@@ -115,33 +121,169 @@ function ColumnHeader({ title, count, icon, accent }: { title: string; count?: n
     );
 }
 
+function EmptyColumnState({ icon, msg, subMsg }: { icon: string; msg: string; subMsg: string }) {
+    return (
+        <div className="flex flex-col items-center justify-center text-center py-10 px-4 border-2 border-dashed border-gray-200 rounded-xl bg-white/60 gap-3">
+            <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center">
+                {/* @ts-expect-error custom element */}
+                <iconify-icon icon={icon} class="text-gray-400 text-xl" />
+            </div>
+            <div>
+                <p className="text-sm font-medium text-gray-700">{msg}</p>
+                <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-[180px]">{subMsg}</p>
+            </div>
+        </div>
+    );
+}
+
+function SkeletonCard() {
+    return (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col gap-3 animate-pulse">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-gray-200 rounded-full" />
+                    <div className="w-24 h-3 bg-gray-200 rounded" />
+                </div>
+                <div className="w-10 h-3 bg-gray-100 rounded" />
+            </div>
+            <div className="space-y-1.5">
+                <div className="w-full h-3 bg-gray-100 rounded" />
+                <div className="w-5/6 h-3 bg-gray-100 rounded" />
+                <div className="w-4/6 h-3 bg-gray-100 rounded" />
+            </div>
+            <div className="flex items-center justify-between pt-1 border-t border-gray-50">
+                <div className="w-12 h-3 bg-gray-100 rounded" />
+                <div className="w-24 h-6 bg-gray-100 rounded-lg" />
+            </div>
+        </div>
+    );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+    const [leads, setLeads] = useState<Lead[]>([]);
+    const [loading, setLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState<Platform>('all');
     const [panelOpen, setPanelOpen] = useState(false);
     const [panelProspect, setPanelProspect] = useState<PanelProspect | undefined>();
 
-    const openPanel = (signal: Signal) => {
+    // ── Data fetching ──────────────────────────────────────────────────────────
+    const fetchLeads = useCallback(async () => {
+        setLoading(true);
+        try {
+            // 1. Get authenticated user
+            const { data: { user }, error: userErr } = await supabase.auth.getUser();
+            if (userErr || !user) {
+                toast.error('Could not authenticate. Please log in again.');
+                setLoading(false);
+                return;
+            }
+
+            // 2. Fetch the user's active workspace
+            const { data: workspaces, error: wsErr } = await supabase
+                .from('workspaces')
+                .select('id')
+                .eq('user_id', user.id)
+                .limit(1);
+
+            if (wsErr || !workspaces || workspaces.length === 0) {
+                setLoading(false);
+                return; // No workspace yet — board stays empty
+            }
+
+            const workspaceId = workspaces[0].id;
+
+            // 3. Fetch all leads for this workspace
+            const { data: rows, error: leadsErr } = await supabase
+                .from('leads')
+                .select('id, workspace_id, platform, author_handle, post_content, post_url, status')
+                .eq('workspace_id', workspaceId)
+                .order('id', { ascending: false });
+
+            if (leadsErr) {
+                toast.error('Failed to load leads.');
+                console.error('[Dashboard] leads fetch error:', leadsErr.message);
+                setLoading(false);
+                return;
+            }
+
+            setLeads((rows ?? []) as Lead[]);
+        } catch (err) {
+            console.error('[Dashboard] unexpected error:', err);
+            toast.error('Something went wrong loading your board.');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+    // ── Open AI panel ──────────────────────────────────────────────────────────
+    const openPanel = (lead: Lead) => {
         setPanelProspect({
-            platform: signal.platform,
-            handle: signal.source,
-            originalPost: signal.excerpt.replace(/"/g, ''),
+            platform: lead.platform,
+            handle: `@${lead.author_handle}`,
+            originalPost: lead.post_content,
         });
         setPanelOpen(true);
     };
 
+    // ── Drag-and-drop handler ─────────────────────────────────────────────────
+    const handleDragEnd = async (result: DropResult) => {
+        const { source, destination, draggableId } = result;
+
+        // Dropped outside a column or in the same column
+        if (!destination || source.droppableId === destination.droppableId) return;
+
+        const newStatus = destination.droppableId as LeadStatus;
+        const leadId = draggableId;
+
+        // Snapshot for rollback
+        const snapshot = leads;
+
+        // Optimistic update
+        setLeads((prev) =>
+            prev.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l))
+        );
+
+        // Persist to Supabase
+        const { error } = await supabase
+            .from('leads')
+            .update({ status: newStatus })
+            .eq('id', leadId);
+
+        if (error) {
+            // Rollback
+            setLeads(snapshot);
+            toast.error('Could not update lead status. Please try again.');
+            console.error('[Dashboard] status update error:', error.message);
+        } else {
+            toast.success(`Moved to ${COLUMN_CONFIG.find(c => c.id === newStatus)?.title ?? newStatus}`);
+        }
+    };
+
+    // ── Derived columns ────────────────────────────────────────────────────────
+    const byStatus = (status: LeadStatus) =>
+        leads.filter((l) => l.status === status);
+
+    const filteredNew = () =>
+        byStatus('new').filter(
+            (l) => activeFilter === 'all' || l.platform === activeFilter
+        );
+
+    // ─────────────────────────────────────────────────────────────────────────
     return (
         <div className="flex flex-col gap-5 h-full">
 
-            {/* ── AI Action Panel ───────────────────────────────────────────────── */}
+            {/* ── AI Action Panel ─────────────────────────────────────────────── */}
             <AIActionPanel
                 isOpen={panelOpen}
                 onClose={() => setPanelOpen(false)}
                 prospect={panelProspect}
             />
 
-            {/* ── Top Control Bar ───────────────────────────────────────────────── */}
+            {/* ── Top Control Bar ─────────────────────────────────────────────── */}
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl p-1 shadow-sm flex-wrap">
                     {platformFilters.map((f) => (
@@ -149,8 +291,8 @@ export default function DashboardPage() {
                             key={f.id}
                             onClick={() => setActiveFilter(f.id)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${activeFilter === f.id
-                                    ? 'bg-indigo-600 text-white shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
                                 }`}
                         >
                             {/* @ts-expect-error custom element */}
@@ -170,141 +312,343 @@ export default function DashboardPage() {
                 </button>
             </div>
 
-            {/* ── Kanban Board ──────────────────────────────────────────────────── */}
-            <div className="flex flex-col md:flex-row md:overflow-x-auto gap-4 pb-4 flex-1 md:items-start">
+            {/* ── Kanban Board ─────────────────────────────────────────────────── */}
+            <DragDropContext onDragEnd={handleDragEnd}>
+                <div className="flex flex-col md:flex-row md:overflow-x-auto gap-4 pb-4 flex-1 md:items-start">
 
-                {/* ── Column 1: New Signals ──────────────────────────────────────── */}
-                <div className="w-full md:w-80 md:shrink-0 bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
-                    <ColumnHeader title="New Signals" count={NEW_SIGNALS.filter(s => !s.blurred && (activeFilter === 'all' || s.platform === activeFilter)).length + 1} icon="solar:radar-linear" accent="text-indigo-500" />
+                    {/* ── Column: New Signals ─────────────────────────────────────── */}
+                    <div className="w-full md:w-80 md:shrink-0 bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
+                        <ColumnHeader
+                            title="New Signals"
+                            count={loading ? undefined : filteredNew().length}
+                            icon="solar:radar-linear"
+                            accent="text-indigo-500"
+                        />
 
-                    <div className="flex flex-col gap-2.5">
-                        {NEW_SIGNALS.map((signal) => {
-                            const intent = intentConfig[signal.intent];
-                            const isFiltered = !signal.blurred && activeFilter !== 'all' && signal.platform !== activeFilter;
+                        {/* Skeleton while loading */}
+                        {loading && (
+                            <div className="flex flex-col gap-2.5">
+                                <SkeletonCard />
+                                <SkeletonCard />
+                            </div>
+                        )}
 
-                            if (signal.blurred) {
-                                return (
-                                    <div key={signal.id} className="relative rounded-xl border border-gray-200 bg-white overflow-hidden">
-                                        <div className="p-4 blur-sm select-none opacity-60 pointer-events-none">
-                                            <PlatformBadge icon={signal.platformIcon} color={signal.platformColor} source={signal.source} />
-                                            <p className="mt-2 text-sm text-gray-700 leading-snug line-clamp-2">{signal.excerpt}</p>
-                                            <div className="mt-3 flex items-center justify-between">
-                                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${intent.cls}`}>{intent.label}</span>
-                                                <span className="text-[10px] text-gray-400">{signal.timeAgo}</span>
+                        {!loading && (
+                            <Droppable droppableId="new">
+                                {(provided, snapshot) => (
+                                    <div
+                                        ref={provided.innerRef}
+                                        {...provided.droppableProps}
+                                        className={`flex flex-col gap-2.5 min-h-[60px] rounded-xl transition-colors duration-150 ${snapshot.isDraggingOver ? 'bg-indigo-50/60' : ''
+                                            }`}
+                                    >
+                                        {filteredNew().length === 0 && !snapshot.isDraggingOver && (
+                                            <EmptyColumnState
+                                                icon="solar:radar-linear"
+                                                msg="No signals yet."
+                                                subMsg="Run the scraper to fetch leads from Reddit."
+                                            />
+                                        )}
+
+                                        {filteredNew().map((lead, index) => (
+                                            <Draggable key={lead.id} draggableId={lead.id} index={index}>
+                                                {(drag, dragSnapshot) => (
+                                                    <div
+                                                        ref={drag.innerRef}
+                                                        {...drag.draggableProps}
+                                                        {...drag.dragHandleProps}
+                                                        className={`group bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 p-4 flex flex-col gap-3 cursor-grab active:cursor-grabbing ${dragSnapshot.isDragging ? 'shadow-lg ring-2 ring-indigo-300 rotate-1' : ''
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <PlatformBadge platform={lead.platform} source={`@${lead.author_handle}`} />
+                                                            {lead.post_url && (
+                                                                <a
+                                                                    href={lead.post_url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="text-gray-300 hover:text-indigo-500 transition-colors"
+                                                                    title="View original post"
+                                                                >
+                                                                    {/* @ts-expect-error custom element */}
+                                                                    <iconify-icon icon="solar:arrow-right-up-linear" class="text-base" />
+                                                                </a>
+                                                            )}
+                                                        </div>
+
+                                                        <p className="text-sm text-gray-700 leading-snug line-clamp-3">
+                                                            {lead.post_content}
+                                                        </p>
+
+                                                        <div className="flex items-center justify-between pt-1 border-t border-gray-50">
+                                                            <span className="text-[10px] text-gray-400 font-medium capitalize">{lead.platform}</span>
+                                                            <button
+                                                                onClick={() => openPanel(lead)}
+                                                                className="flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 active:scale-95 px-2.5 py-1.5 rounded-lg transition-all duration-150"
+                                                            >
+                                                                {/* @ts-expect-error custom element */}
+                                                                <iconify-icon icon="solar:magic-stick-3-linear" class="text-sm" />
+                                                                Generate AI Draft
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </Draggable>
+                                        ))}
+                                        {provided.placeholder}
+
+                                        {/* Static paywall card — always visible as upgrade prompt */}
+                                        <div className="relative rounded-xl border border-gray-200 bg-white overflow-hidden">
+                                            <div className="p-4 blur-sm select-none opacity-60 pointer-events-none">
+                                                <PlatformBadge platform="linkedin" source="LinkedIn Post" />
+                                                <p className="mt-2 text-sm text-gray-700 leading-snug line-clamp-2">
+                                                    &ldquo;Our sales team is evaluating new prospecting tools this quarter…&rdquo;
+                                                </p>
+                                                <div className="mt-3 flex items-center justify-between">
+                                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-amber-100 text-amber-600 border-amber-200">Warm</span>
+                                                    <span className="text-[10px] text-gray-400">34 min ago</span>
+                                                </div>
+                                            </div>
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-[2px] px-4 text-center gap-2">
+                                                <div className="w-9 h-9 rounded-full bg-indigo-50 flex items-center justify-center">
+                                                    {/* @ts-expect-error custom element */}
+                                                    <iconify-icon icon="solar:lock-linear" class="text-indigo-500 text-lg" />
+                                                </div>
+                                                <p className="text-xs font-medium text-gray-700">
+                                                    <button
+                                                        onClick={() => toast('🚀 Upgrade to Pro to unlock 45+ more signals!', { icon: '✨' })}
+                                                        className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2 transition-colors"
+                                                    >
+                                                        Upgrade to Pro
+                                                    </button>{' '}
+                                                    to unlock 45 more signals.
+                                                </p>
                                             </div>
                                         </div>
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-[2px] px-4 text-center gap-2">
-                                            <div className="w-9 h-9 rounded-full bg-indigo-50 flex items-center justify-center">
+                                    </div>
+                                )}
+                            </Droppable>
+                        )}
+                    </div>
+
+                    {/* ── Column: Action Required (drafted) ──────────────────────── */}
+                    <div className="w-full md:w-80 md:shrink-0 bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
+                        <ColumnHeader
+                            title="Action Required"
+                            count={loading ? undefined : byStatus('drafted').length}
+                            icon="solar:bell-bing-linear"
+                            accent="text-amber-500"
+                        />
+
+                        {loading && (
+                            <div className="flex flex-col gap-2.5"><SkeletonCard /></div>
+                        )}
+
+                        {!loading && (
+                            <Droppable droppableId="drafted">
+                                {(provided, snapshot) => (
+                                    <div
+                                        ref={provided.innerRef}
+                                        {...provided.droppableProps}
+                                        className={`flex flex-col gap-2.5 min-h-[60px] rounded-xl transition-colors duration-150 ${snapshot.isDraggingOver ? 'bg-amber-50/60' : ''
+                                            }`}
+                                    >
+                                        {byStatus('drafted').length === 0 && !snapshot.isDraggingOver && (
+                                            <EmptyColumnState
+                                                icon="solar:magic-stick-3-linear"
+                                                msg="No drafts pending."
+                                                subMsg="AI replies waiting for your approval will appear here."
+                                            />
+                                        )}
+
+                                        {byStatus('drafted').map((lead, index) => (
+                                            <Draggable key={lead.id} draggableId={lead.id} index={index}>
+                                                {(drag, dragSnapshot) => (
+                                                    <div
+                                                        ref={drag.innerRef}
+                                                        {...drag.draggableProps}
+                                                        {...drag.dragHandleProps}
+                                                        className={`group bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 p-4 flex flex-col gap-3 cursor-grab active:cursor-grabbing ${dragSnapshot.isDragging ? 'shadow-lg ring-2 ring-amber-300 rotate-1' : ''
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <PlatformBadge platform={lead.platform} source={`@${lead.author_handle}`} />
+                                                            {lead.post_url && (
+                                                                <a
+                                                                    href={lead.post_url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="text-gray-300 hover:text-indigo-500 transition-colors"
+                                                                >
+                                                                    {/* @ts-expect-error custom element */}
+                                                                    <iconify-icon icon="solar:arrow-right-up-linear" class="text-base" />
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-sm text-gray-700 leading-snug line-clamp-3">{lead.post_content}</p>
+                                                        <div className="flex items-center justify-between pt-1 border-t border-gray-50">
+                                                            <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-medium">Draft ready</span>
+                                                            <button
+                                                                onClick={() => openPanel(lead)}
+                                                                className="flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 active:scale-95 px-2.5 py-1.5 rounded-lg transition-all duration-150"
+                                                            >
+                                                                {/* @ts-expect-error custom element */}
+                                                                <iconify-icon icon="solar:magic-stick-3-linear" class="text-sm" />
+                                                                Review Draft
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </Draggable>
+                                        ))}
+                                        {provided.placeholder}
+                                    </div>
+                                )}
+                            </Droppable>
+                        )}
+                    </div>
+
+                    {/* ── Column: Engaged (replied) ───────────────────────────────── */}
+                    <div className="w-full md:w-80 md:shrink-0 bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
+                        <ColumnHeader
+                            title="Engaged"
+                            count={loading ? undefined : byStatus('replied').length}
+                            icon="solar:chat-round-dots-linear"
+                            accent="text-emerald-500"
+                        />
+
+                        {loading && (
+                            <div className="flex flex-col gap-2.5"><SkeletonCard /></div>
+                        )}
+
+                        {!loading && (
+                            <Droppable droppableId="replied">
+                                {(provided, snapshot) => (
+                                    <div
+                                        ref={provided.innerRef}
+                                        {...provided.droppableProps}
+                                        className={`flex flex-col gap-2.5 min-h-[60px] rounded-xl transition-colors duration-150 ${snapshot.isDraggingOver ? 'bg-emerald-50/60' : ''
+                                            }`}
+                                    >
+                                        {byStatus('replied').length === 0 && !snapshot.isDraggingOver && (
+                                            <EmptyColumnState
+                                                icon="solar:chat-round-dots-linear"
+                                                msg="No engaged leads."
+                                                subMsg="Move cards here after you've sent your reply."
+                                            />
+                                        )}
+
+                                        {byStatus('replied').map((lead, index) => (
+                                            <Draggable key={lead.id} draggableId={lead.id} index={index}>
+                                                {(drag, dragSnapshot) => (
+                                                    <div
+                                                        ref={drag.innerRef}
+                                                        {...drag.draggableProps}
+                                                        {...drag.dragHandleProps}
+                                                        className={`group bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 p-4 flex flex-col gap-3 cursor-grab active:cursor-grabbing ${dragSnapshot.isDragging ? 'shadow-lg ring-2 ring-emerald-300 rotate-1' : ''
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <PlatformBadge platform={lead.platform} source={`@${lead.author_handle}`} />
+                                                            <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Replied</span>
+                                                        </div>
+                                                        <p className="text-sm text-gray-700 leading-snug line-clamp-3 italic">{lead.post_content}</p>
+                                                        <div className="flex items-center gap-2 pt-1 border-t border-gray-50">
+                                                            {lead.post_url && (
+                                                                <a
+                                                                    href={lead.post_url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:scale-95 py-1.5 rounded-lg transition-all duration-150"
+                                                                >
+                                                                    {/* @ts-expect-error custom element */}
+                                                                    <iconify-icon icon="solar:arrow-right-up-linear" class="text-sm" />
+                                                                    View Thread
+                                                                </a>
+                                                            )}
+                                                            <button
+                                                                onClick={() => openPanel(lead)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 active:scale-95 py-1.5 rounded-lg transition-all duration-150"
+                                                            >
+                                                                {/* @ts-expect-error custom element */}
+                                                                <iconify-icon icon="solar:magic-stick-3-linear" class="text-sm" />
+                                                                AI Follow-up
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </Draggable>
+                                        ))}
+                                        {provided.placeholder}
+                                    </div>
+                                )}
+                            </Droppable>
+                        )}
+                    </div>
+
+                    {/* ── Column: Archive / Closed (dismissed) ────────────────────── */}
+                    <div className="w-full md:w-80 md:shrink-0 bg-gray-50/60 rounded-xl p-3 flex flex-col gap-2.5 border border-dashed border-gray-200">
+                        <ColumnHeader
+                            title="Archive / Closed"
+                            count={loading ? undefined : byStatus('dismissed').length}
+                            icon="solar:archive-linear"
+                            accent="text-gray-400"
+                        />
+                        <p className="text-[10px] text-gray-400 text-center py-1">Drop cards here to clear your board</p>
+
+                        {loading && (
+                            <div className="flex flex-col gap-2.5"><SkeletonCard /></div>
+                        )}
+
+                        {!loading && (
+                            <Droppable droppableId="dismissed">
+                                {(provided, snapshot) => (
+                                    <div
+                                        ref={provided.innerRef}
+                                        {...provided.droppableProps}
+                                        className={`flex flex-col gap-2.5 min-h-[60px] rounded-xl transition-colors duration-150 ${snapshot.isDraggingOver ? 'bg-gray-100/80' : ''
+                                            }`}
+                                    >
+                                        {byStatus('dismissed').length === 0 && !snapshot.isDraggingOver && (
+                                            <div className="border border-dashed border-gray-200 rounded-lg py-5 flex flex-col items-center gap-1.5 text-gray-300">
                                                 {/* @ts-expect-error custom element */}
-                                                <iconify-icon icon="solar:lock-linear" class="text-indigo-500 text-lg" />
+                                                <iconify-icon icon="solar:add-circle-linear" class="text-2xl" />
+                                                <span className="text-xs">Drop a card here</span>
                                             </div>
-                                            <p className="text-xs font-medium text-gray-700">
-                                                <button onClick={() => toast('🚀 Upgrade to Pro to unlock 45+ more signals!', { icon: '✨' })} className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2 transition-colors">
-                                                    Upgrade to Pro
-                                                </button>{' '}to unlock 45 more signals.
-                                            </p>
-                                        </div>
+                                        )}
+
+                                        {byStatus('dismissed').map((lead, index) => (
+                                            <Draggable key={lead.id} draggableId={lead.id} index={index}>
+                                                {(drag, dragSnapshot) => (
+                                                    <div
+                                                        ref={drag.innerRef}
+                                                        {...drag.draggableProps}
+                                                        {...drag.dragHandleProps}
+                                                        className={`bg-white/70 rounded-xl border border-gray-100 p-3.5 flex flex-col gap-2 opacity-60 cursor-grab active:cursor-grabbing ${dragSnapshot.isDragging ? 'opacity-100 shadow-lg' : ''
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center gap-1.5">
+                                                            {/* @ts-expect-error custom element */}
+                                                            <iconify-icon icon="solar:archive-down-linear" class="text-gray-300 text-sm" />
+                                                            <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Closed</span>
+                                                        </div>
+                                                        <p className="text-sm text-gray-500 italic leading-snug line-clamp-2">{lead.post_content}</p>
+                                                        <span className="text-[10px] text-gray-300">{lead.platform}</span>
+                                                    </div>
+                                                )}
+                                            </Draggable>
+                                        ))}
+                                        {provided.placeholder}
                                     </div>
-                                );
-                            }
-
-                            if (isFiltered) return null;
-
-                            return (
-                                <div key={signal.id} className="group bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 p-4 flex flex-col gap-3">
-                                    <div className="flex items-center justify-between">
-                                        <PlatformBadge icon={signal.platformIcon} color={signal.platformColor} source={signal.source} />
-                                        <div className="flex items-center gap-2">
-                                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${intent.cls}`}>{intent.label}</span>
-                                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{signal.score}%</span>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-gray-700 leading-snug line-clamp-3">{signal.excerpt}</p>
-                                    <div className="flex items-center justify-between pt-1 border-t border-gray-50">
-                                        <span className="text-[10px] text-gray-400">{signal.timeAgo}</span>
-                                        <button
-                                            onClick={() => openPanel(signal)}
-                                            className="flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 active:scale-95 px-2.5 py-1.5 rounded-lg transition-all duration-150"
-                                        >
-                                            {/* @ts-expect-error custom element */}
-                                            <iconify-icon icon="solar:magic-stick-3-linear" class="text-sm" />
-                                            Generate AI Draft
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })}
+                                )}
+                            </Droppable>
+                        )}
                     </div>
-                </div>
 
-                {/* ── Column 2: Action Required ──────────────────────────────────── */}
-                <div className="w-full md:w-80 md:shrink-0 bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
-                    <ColumnHeader title="Action Required" count={0} icon="solar:bell-bing-linear" accent="text-amber-500" />
-                    <div className="flex flex-col items-center justify-center text-center py-10 px-4 border-2 border-dashed border-gray-200 rounded-xl bg-white/60 gap-3">
-                        <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center">
-                            {/* @ts-expect-error custom element */}
-                            <iconify-icon icon="solar:magic-stick-3-linear" class="text-gray-400 text-xl" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-700">No drafts pending.</p>
-                            <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-[180px]">AI replies waiting for your approval will appear here.</p>
-                        </div>
-                    </div>
                 </div>
-
-                {/* ── Column 3: Engaged ──────────────────────────────────────────── */}
-                <div className="w-full md:w-80 md:shrink-0 bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
-                    <ColumnHeader title="Engaged" count={ENGAGED_CARDS.length} icon="solar:chat-round-dots-linear" accent="text-emerald-500" />
-                    {ENGAGED_CARDS.map((card) => (
-                        <div key={card.id} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 p-4 flex flex-col gap-3">
-                            <div className="flex items-center justify-between">
-                                <PlatformBadge icon={card.platformIcon} color={card.platformColor} source={card.source} />
-                                <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">{card.status}</span>
-                            </div>
-                            <p className="text-sm text-gray-700 leading-snug line-clamp-3 italic">{card.excerpt}</p>
-                            <div className="flex items-center gap-2 text-[10px] text-gray-400">
-                                {/* @ts-expect-error custom element */}
-                                <iconify-icon icon="solar:chat-round-linear" class="text-xs" />
-                                {card.replies} replies &nbsp;·&nbsp; {card.timeAgo}
-                            </div>
-                            <div className="flex items-center gap-2 pt-1 border-t border-gray-50">
-                                <button onClick={() => toast('Opening thread…', { icon: '💬' })} className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:scale-95 py-1.5 rounded-lg transition-all duration-150">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:arrow-right-up-linear" class="text-sm" />
-                                    View Thread
-                                </button>
-                                <button onClick={() => toast.success('AI follow-up generated!', { icon: '✨' })} className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 active:scale-95 py-1.5 rounded-lg transition-all duration-150">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:magic-stick-3-linear" class="text-sm" />
-                                    AI Follow-up
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* ── Column 4: Archive / Closed ─────────────────────────────────── */}
-                <div className="w-full md:w-80 md:shrink-0 bg-gray-50/60 rounded-xl p-3 flex flex-col gap-2.5 border border-dashed border-gray-200">
-                    <ColumnHeader title="Archive / Closed" count={ARCHIVE_CARDS.length} icon="solar:archive-linear" accent="text-gray-400" />
-                    <p className="text-[10px] text-gray-400 text-center py-1">Drop cards here to clear your board</p>
-                    {ARCHIVE_CARDS.map((card) => (
-                        <div key={card.id} className="bg-white/70 rounded-xl border border-gray-100 p-3.5 flex flex-col gap-2 opacity-60">
-                            <div className="flex items-center gap-1.5">
-                                {/* @ts-expect-error custom element */}
-                                <iconify-icon icon="solar:archive-down-linear" class="text-gray-300 text-sm" />
-                                <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Closed</span>
-                            </div>
-                            <p className="text-sm text-gray-500 italic leading-snug line-clamp-2">{card.excerpt}</p>
-                            <span className="text-[10px] text-gray-300">{card.timeAgo}</span>
-                        </div>
-                    ))}
-                    <div className="mt-1 border border-dashed border-gray-200 rounded-lg py-5 flex flex-col items-center gap-1.5 text-gray-300">
-                        {/* @ts-expect-error custom element */}
-                        <iconify-icon icon="solar:add-circle-linear" class="text-2xl" />
-                        <span className="text-xs">Drop a card here</span>
-                    </div>
-                </div>
-            </div>
+            </DragDropContext>
         </div>
     );
 }
