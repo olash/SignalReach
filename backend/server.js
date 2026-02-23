@@ -174,10 +174,14 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
 
                 console.log('🚀 Calling Apify for workspace:', workspace.id, 'with keywords:', workspace.keywords);
                 // 2a ── Start the Apify Reddit scraper run
-                const run = await apify.actor('trudax/reddit-scraper').call({
-                    searchQueries: [keywords],
-                    maxItems: 10,
-                }, { waitSecs: 120 }); // wait up to 2 min for run to finish
+                const input = {
+                    "searches": [keywords],
+                    "sort": "new",
+                    "time": "week",
+                    "maxItems": 15,
+                    "extendOutputFunction": "($) => { return {} }"
+                };
+                const run = await apify.actor('mstephen190/reddit-scraper').call(input, { waitSecs: 120 }); // wait up to 2 min for run to finish
 
                 // 2b ── Fetch the dataset items from the completed run
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
@@ -193,10 +197,10 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
                     .map((item) => ({
                         workspace_id: workspace.id,
                         platform: 'reddit',
-                        author_handle: item.author ?? 'unknown',
-                        post_content: (item.body || item.title || '').slice(0, 5000),
-                        post_url: item.url ?? item.permalink ?? null,
-                        status: 'new',
+                        author_handle: item.author || 'Unknown',
+                        post_content: (item.body || item.title || 'No content').slice(0, 5000),
+                        post_url: item.url,
+                        status: 'new'
                     }));
 
                 if (signals.length === 0) return;
