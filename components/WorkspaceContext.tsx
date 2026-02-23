@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +40,8 @@ export function useWorkspace() {
 const LS_KEY = 'sr_active_workspace_id';
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
+    const router = useRouter();
+    const pathname = usePathname();
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [activeWorkspace, setActiveWorkspaceState] = useState<Workspace | null>(null);
     const [loading, setLoading] = useState(true);
@@ -54,7 +57,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             .eq('user_id', user.id)
             .order('id', { ascending: true });
 
-        if (error || !data?.length) { setLoading(false); return; }
+        // ── Onboarding gate: authenticated but no workspace yet ──
+        if (error || !data?.length) {
+            // Only redirect if we're not already on /welcome to avoid loops
+            if (pathname !== '/welcome') {
+                router.push('/welcome');
+            }
+            setLoading(false);
+            return;
+        }
 
         setWorkspaces(data as Workspace[]);
 
@@ -63,7 +74,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const saved = savedId ? (data as Workspace[]).find((w) => w.id === savedId) : null;
         setActiveWorkspaceState(saved ?? (data[0] as Workspace));
         setLoading(false);
-    }, []);
+    }, [router, pathname]);
 
     useEffect(() => { fetchWorkspaces(); }, [fetchWorkspaces]);
 
@@ -73,6 +84,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             localStorage.setItem(LS_KEY, ws.id);
         }
     }, []);
+
+    // ── Loading / gate spinner — prevents UI flash while checking ─────────────
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
+                {/* @ts-expect-error custom element */}
+                <iconify-icon icon="solar:spinner-linear" class="text-3xl text-indigo-500 animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <WorkspaceContext.Provider value={{ workspaces, activeWorkspace, setActiveWorkspace, loading, refetch: fetchWorkspaces }}>
