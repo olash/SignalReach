@@ -6,10 +6,16 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import { useWorkspace } from '@/components/WorkspaceContext';
+import { useAuth } from '@/components/AuthContext';
 
 export default function Header() {
     const router = useRouter();
     const { workspaces, activeWorkspace, setActiveWorkspace, loading } = useWorkspace();
+    const { user } = useAuth();
+
+    const displayName = (user?.user_metadata?.full_name as string | undefined) || user?.email || 'My Account';
+    const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
+    const initials = displayName.charAt(0).toUpperCase();
 
     const [workspaceOpen, setWorkspaceOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
@@ -36,7 +42,7 @@ export default function Header() {
         router.push('/');
     };
 
-    const initials = activeWorkspace?.name
+    const wsInitials = activeWorkspace?.name
         ? activeWorkspace.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
         : '…';
 
@@ -51,7 +57,7 @@ export default function Header() {
                     className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors text-sm disabled:opacity-50"
                 >
                     <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
-                        {initials}
+                        {wsInitials}
                     </div>
                     <span className="font-medium text-[#111827] max-w-[120px] truncate">
                         {loading ? 'Loading…' : (activeWorkspace?.name ?? 'No workspace')}
@@ -146,16 +152,20 @@ export default function Header() {
                 <div className="relative ml-1" ref={profileRef}>
                     <button
                         onClick={() => setProfileOpen((o) => !o)}
-                        className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-semibold hover:ring-2 hover:ring-indigo-300 transition-all"
+                        className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-semibold hover:ring-2 hover:ring-indigo-300 transition-all overflow-hidden border border-gray-200"
                     >
-                        SR
+                        {avatarUrl ? (
+                            <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="text-sm font-bold text-indigo-700">{initials}</span>
+                        )}
                     </button>
 
                     {profileOpen && (
                         <div className="absolute top-full right-0 mt-1.5 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in slide-in-from-top-1 duration-100">
                             <div className="px-4 py-3 border-b border-gray-100">
-                                <p className="text-sm font-semibold text-gray-900 truncate">Sarah Reynolds</p>
-                                <p className="text-xs text-gray-400 truncate">sarah@acmecorp.io</p>
+                                <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
+                                <p className="text-xs text-gray-400 truncate">{user?.email ?? ''}</p>
                             </div>
                             <div className="py-1">
                                 <Link
