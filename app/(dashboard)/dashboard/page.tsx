@@ -5,6 +5,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import toast from 'react-hot-toast';
 import AIActionPanel from '@/components/AIActionPanel';
 import { supabase } from '@/lib/supabase';
+import { useWorkspace } from '@/components/WorkspaceContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -162,6 +163,7 @@ function SkeletonCard() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+    const { activeWorkspace } = useWorkspace();
     const [leads, setLeads] = useState<Lead[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState<Platform>('all');
@@ -170,41 +172,18 @@ export default function DashboardPage() {
 
     // ── Data fetching ──────────────────────────────────────────────────────────
     const fetchLeads = useCallback(async () => {
+        if (!activeWorkspace) { setLoading(false); return; }
         setLoading(true);
         try {
-            // 1. Get authenticated user
-            const { data: { user }, error: userErr } = await supabase.auth.getUser();
-            if (userErr || !user) {
-                toast.error('Could not authenticate. Please log in again.');
-                setLoading(false);
-                return;
-            }
-
-            // 2. Fetch the user's active workspace
-            const { data: workspaces, error: wsErr } = await supabase
-                .from('workspaces')
-                .select('id')
-                .eq('user_id', user.id)
-                .limit(1);
-
-            if (wsErr || !workspaces || workspaces.length === 0) {
-                setLoading(false);
-                return; // No workspace yet — board stays empty
-            }
-
-            const workspaceId = workspaces[0].id;
-
-            // 3. Fetch all leads for this workspace
             const { data: rows, error: leadsErr } = await supabase
                 .from('leads')
                 .select('id, workspace_id, platform, author_handle, post_content, post_url, status')
-                .eq('workspace_id', workspaceId)
+                .eq('workspace_id', activeWorkspace.id)
                 .order('id', { ascending: false });
 
             if (leadsErr) {
                 toast.error('Failed to load leads.');
                 console.error('[Dashboard] leads fetch error:', leadsErr.message);
-                setLoading(false);
                 return;
             }
 
@@ -215,7 +194,7 @@ export default function DashboardPage() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [activeWorkspace]);
 
     useEffect(() => { fetchLeads(); }, [fetchLeads]);
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, KeyboardEvent } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
+import { useWorkspace } from '@/components/WorkspaceContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,37 +18,27 @@ const FREQUENCY_OPTIONS: { value: Frequency; label: string; desc: string }[] = [
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PipelinesPage() {
-    const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+    const { activeWorkspace } = useWorkspace();
     const [keywords, setKeywords] = useState<string[]>([]);
     const [inputValue, setInputValue] = useState('');
     const [frequency, setFrequency] = useState<Frequency>('24h');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // ── Fetch workspace settings ───────────────────────────────────────────────
+    // ── Sync settings from active workspace ───────────────────────────────────
     const fetchSettings = useCallback(async () => {
+        if (!activeWorkspace) { setLoading(false); return; }
         setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setLoading(false); return; }
-
-        const { data: workspaces } = await supabase
-            .from('workspaces')
-            .select('id, keywords, scrape_frequency')
-            .eq('user_id', user.id)
-            .limit(1);
-
-        if (workspaces?.length) {
-            const ws = workspaces[0];
-            setWorkspaceId(ws.id);
-            if (ws.keywords) {
-                // keywords may be a comma-delimited string or already an array
-                const raw: string = ws.keywords;
-                setKeywords(raw.split(',').map((k: string) => k.trim()).filter(Boolean));
-            }
-            if (ws.scrape_frequency) setFrequency(ws.scrape_frequency as Frequency);
+        if (activeWorkspace.keywords) {
+            setKeywords(activeWorkspace.keywords.split(',').map((k) => k.trim()).filter(Boolean));
+        } else {
+            setKeywords([]);
+        }
+        if (activeWorkspace.scrape_frequency) {
+            setFrequency(activeWorkspace.scrape_frequency as Frequency);
         }
         setLoading(false);
-    }, []);
+    }, [activeWorkspace]);
 
     useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
@@ -76,7 +67,7 @@ export default function PipelinesPage() {
 
     // ── Save ──────────────────────────────────────────────────────────────────
     const handleSave = async () => {
-        if (!workspaceId) {
+        if (!activeWorkspace) {
             toast.error('No workspace found. Complete onboarding first.');
             return;
         }
@@ -87,7 +78,7 @@ export default function PipelinesPage() {
                 keywords: keywords.join(', '),
                 scrape_frequency: frequency,
             })
-            .eq('id', workspaceId);
+            .eq('id', activeWorkspace.id);
 
         if (error) {
             toast.error('Failed to save settings.');
@@ -188,8 +179,8 @@ export default function PipelinesPage() {
                                     key={opt.value}
                                     onClick={() => setFrequency(opt.value)}
                                     className={`flex flex-col items-center text-center gap-1 p-4 rounded-xl border-2 transition-all duration-150 ${frequency === opt.value
-                                            ? 'border-indigo-500 bg-indigo-50 shadow-sm'
-                                            : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                                        ? 'border-indigo-500 bg-indigo-50 shadow-sm'
+                                        : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
                                         }`}
                                 >
                                     <span className={`text-sm font-semibold ${frequency === opt.value ? 'text-indigo-700' : 'text-gray-700'}`}>

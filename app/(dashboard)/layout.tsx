@@ -1,6 +1,7 @@
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import { AuthGate } from "@/components/AuthContext";
+import { WorkspaceProvider } from "@/components/WorkspaceContext";
 
 export default function DashboardLayout({
     children,
@@ -9,14 +10,17 @@ export default function DashboardLayout({
 }) {
     return (
         <AuthGate>
-            <div className="h-screen overflow-hidden flex bg-[#F9FAFB]">
-                <Sidebar />
-                <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-                    <Header />
-                    <main className="flex-1 overflow-y-auto p-6">{children}</main>
+            <WorkspaceProvider>
+                <div className="h-screen overflow-hidden flex bg-[#F9FAFB]">
+                    <Sidebar />
+                    <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+                        <Header />
+                        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+                    </div>
                 </div>
-            </div>
+            </WorkspaceProvider>
         </AuthGate>
     );
 }
+
 
