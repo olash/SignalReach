@@ -198,8 +198,10 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
                     .map((item) => ({
                         workspace_id: workspace.id,
                         platform: 'reddit',
-                        author_handle: item.username || item.author || 'Unknown',
-                        post_content: (item.body || item.title || 'No content').slice(0, 5000),
+                        intent_score: 'Medium',
+                        original_post_id: String(item.id || item.parsedId || item.url || Date.now()),
+                        author_handle: String(item.username || item.author || 'Unknown User'),
+                        post_content: String(item.body || item.title || 'No content found').substring(0, 1000),
                         post_url: item.url,
                         status: 'new'
                     }));
