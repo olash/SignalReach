@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import Script from "next/script";
+import { AuthProvider } from "@/lib/AuthContext";
 
 export const metadata: Metadata = {
     title: "SignalReach | Intent-Based Outreach",
@@ -39,8 +40,13 @@ export default function RootLayout({
                     }}
                 />
 
-                {children}
+                {/* AuthProvider makes session available everywhere.
+                    The auth GATE lives in (dashboard)/layout.tsx only. */}
+                <AuthProvider>
+                    {children}
+                </AuthProvider>
             </body>
         </html>
     );
 }
+

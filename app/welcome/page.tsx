@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { supabase } from '@/lib/supabase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -72,11 +73,57 @@ export default function WelcomePage() {
         setActiveTab(p === 'saas' ? 'url' : 'manual');
     };
 
-    const handleFinish = async () => {
+    const handleFinish = async () => completeOnboarding();
+
+    const completeOnboarding = async () => {
         setLoading(true);
-        await new Promise((r) => setTimeout(r, 1200));
-        toast.success('Onboarding complete! Scanning for signals…');
-        router.push('/dashboard');
+        try {
+            const { data: { user }, error: authErr } = await supabase.auth.getUser();
+            if (authErr || !user) throw authErr ?? new Error('Not authenticated');
+
+            // 1 ─ Insert workspace
+            const { data: workspace, error: wsErr } = await supabase
+                .from('workspaces')
+                .insert({
+                    user_id: user.id,
+                    name: 'My Primary Workspace',
+                    account_type: form.persona,
+                    website_url: form.websiteUrl.trim() || null,
+                    keywords: form.keywords.trim() || null,
+                })
+                .select('id')
+                .single();
+            if (wsErr) throw wsErr;
+
+            // 2 ─ Insert social profiles (skip empty handles)
+            const profiles = [
+                { platform: 'twitter', handle: form.twitterHandle },
+                { platform: 'reddit', handle: form.redditUsername },
+                { platform: 'linkedin', handle: form.linkedinUrl },
+            ].filter((p) => p.handle.trim());
+
+            if (profiles.length > 0) {
+                const { error: spErr } = await supabase
+                    .from('social_profiles')
+                    .insert(
+                        profiles.map((p) => ({
+                            user_id: user.id,
+                            workspace_id: workspace.id,
+                            platform: p.platform,
+                            handle: p.handle.trim(),
+                        }))
+                    );
+                if (spErr) throw spErr;
+            }
+
+            toast.success('Workspace created! Scanning for signals...');
+            router.push('/dashboard');
+        } catch (err) {
+            console.error('[onboarding]', err);
+            toast.error('Could not save your setup.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -123,15 +170,15 @@ export default function WelcomePage() {
                                                 key={p.id}
                                                 onClick={() => togglePlatform(p.id)}
                                                 className={`flex items-center gap-4 px-4 py-3.5 rounded-xl border-2 text-left transition-all duration-200 ${active
-                                                        ? `${p.bg} border-current shadow-sm`
-                                                        : 'bg-[#F9FAFB] border-gray-200 hover:border-gray-300 hover:bg-white'
+                                                    ? `${p.bg} border-current shadow-sm`
+                                                    : 'bg-[#F9FAFB] border-gray-200 hover:border-gray-300 hover:bg-white'
                                                     }`}
                                             >
                                                 {/* Check square */}
                                                 <div
                                                     className={`w-5 h-5 rounded flex items-center justify-center border-2 shrink-0 transition-all duration-150 ${active
-                                                            ? 'bg-indigo-600 border-indigo-600'
-                                                            : 'bg-white border-gray-300'
+                                                        ? 'bg-indigo-600 border-indigo-600'
+                                                        : 'bg-white border-gray-300'
                                                         }`}
                                                 >
                                                     {active && (
@@ -172,8 +219,8 @@ export default function WelcomePage() {
                                                 key={p}
                                                 onClick={() => setPersona(p)}
                                                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${form.persona === p
-                                                        ? 'bg-white text-indigo-600 shadow-sm border border-gray-200'
-                                                        : 'text-gray-500 hover:text-[#111827]'
+                                                    ? 'bg-white text-indigo-600 shadow-sm border border-gray-200'
+                                                    : 'text-gray-500 hover:text-[#111827]'
                                                     }`}
                                             >
                                                 {p === 'freelancer' ? '🧑‍💻  Freelancer' : '🏢  SaaS / Business'}
@@ -298,8 +345,8 @@ export default function WelcomePage() {
                                         <button
                                             onClick={() => setActiveTab('url')}
                                             className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium rounded-md transition-all duration-200 ${activeTab === 'url'
-                                                    ? 'bg-white text-indigo-600 shadow-sm border border-gray-200'
-                                                    : 'text-gray-500 hover:text-[#111827]'
+                                                ? 'bg-white text-indigo-600 shadow-sm border border-gray-200'
+                                                : 'text-gray-500 hover:text-[#111827]'
                                                 }`}
                                         >
                                             {/* @ts-expect-error custom element */}
@@ -309,8 +356,8 @@ export default function WelcomePage() {
                                         <button
                                             onClick={() => setActiveTab('manual')}
                                             className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium rounded-md transition-all duration-200 ${activeTab === 'manual'
-                                                    ? 'bg-white text-indigo-600 shadow-sm border border-gray-200'
-                                                    : 'text-gray-500 hover:text-[#111827]'
+                                                ? 'bg-white text-indigo-600 shadow-sm border border-gray-200'
+                                                : 'text-gray-500 hover:text-[#111827]'
                                                 }`}
                                         >
                                             {/* @ts-expect-error custom element */}
