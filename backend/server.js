@@ -203,7 +203,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
         // 👔 LINKEDIN SCRAPER
         if (platforms.has('linkedin')) {
             scrapeTasks.push((async () => {
-                const run = await apify.actor('curious_coder/linkedin-post-search').call({ searchKeywords: keywords, maxPosts: 10 });
+                const run = await apify.actor('bebity/linkedin-scraper').call({ urls: [`https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(keywords)}`], maxItems: 10 });
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
                 return items.filter(i => i.text).map(item => ({
                     workspace_id: workspace.id,
@@ -265,7 +265,7 @@ app.post('/api/generate-draft', async (req, res) => {
     const prompt = buildPrompt(postContext.trim(), platform.trim(), tone.trim());
 
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
         const result = await model.generateContent(prompt);
         const response = result.response;
