@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { supabase } from '@/lib/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -9,12 +10,14 @@ export interface AIActionPanelProps {
     /** Whether the drawer is visible */
     isOpen: boolean;
     /** Callback to close the drawer */
-    onClose: () => void;
+    onClose: (statusUpdated?: boolean) => void;
     /** Prospect data to power the UI */
     prospect?: {
+        id: string; // Need ID for database update
         platform: 'reddit' | 'twitter' | 'linkedin';
         handle: string;
         originalPost: string;
+        postUrl: string | null; // Need URL to open
         /** Override for the timezone alert text */
         timezoneNote?: string;
     };
@@ -176,11 +179,32 @@ export default function AIActionPanel({
         try {
             await navigator.clipboard.writeText(draftText);
         } catch {
-            // Clipboard unavailable — still fire toast and close
+            console.warn('Clipboard write failed.');
         }
-        toast.success('Copied to clipboard! Moved to Engaged pipeline.');
-        onClose();
+
+        // 1. Open the original post in a new tab
+        if (prospect?.postUrl) {
+            window.open(prospect.postUrl, '_blank', 'noopener,noreferrer');
+        }
+
+        // 2. Update the database status to 'replied'
+        if (prospect?.id) {
+            const { error } = await supabase
+                .from('signals')
+                .update({ status: 'replied' })
+                .eq('id', prospect.id);
+
+            if (error) {
+                toast.error('Failed to update status.');
+                console.error('Status update error:', error);
+                return;
+            }
+        }
+
+        toast.success('Copied! Now paste your reply in the new tab.');
+        onClose(true); // Tell parent to refresh data
     };
+
 
     // ── Render ───────────────────────────────────────────────────────────────────
     // NOTE: We always render both overlay and panel so CSS transitions play properly.
@@ -191,7 +215,7 @@ export default function AIActionPanel({
             {/* ── Dimmed Overlay ──────────────────────────────────────────────────── */}
             <div
                 aria-hidden="true"
-                onClick={onClose}
+                onClick={() => onClose()}
                 className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
                     }`}
             />
@@ -226,7 +250,7 @@ export default function AIActionPanel({
 
                     {/* Close button */}
                     <button
-                        onClick={onClose}
+                        onClick={() => onClose()}
                         aria-label="Close panel"
                         className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200"
                     >
@@ -320,8 +344,8 @@ export default function AIActionPanel({
                             placeholder={isGenerating ? 'Gemini is drafting your reply…' : undefined}
                             rows={6}
                             className={`w-full px-3.5 py-3 h-40 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none transition-all duration-200 leading-relaxed ${isGenerating
-                                    ? 'text-indigo-400 italic placeholder:text-indigo-300 bg-indigo-50/40 cursor-not-allowed'
-                                    : 'text-gray-800 bg-white'
+                                ? 'text-indigo-400 italic placeholder:text-indigo-300 bg-indigo-50/40 cursor-not-allowed'
+                                : 'text-gray-800 bg-white'
                                 }`}
                         />
 

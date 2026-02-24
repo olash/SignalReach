@@ -139,103 +139,103 @@ function requireCronSecret(req, res, next) {
  */
 app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
     console.log('🤖 Scrape endpoint triggered!');
-    console.log('[cron/scrape] 🕐  Run started at', new Date().toISOString());
-
-    // 1 ── Fetch all workspaces that have keywords configured
-    const { data: workspaces, error: wsErr } = await supabaseAdmin
-        .from('workspaces')
-        .select('id, keywords')
-        .not('keywords', 'is', null);
-
-    console.log('📊 Workspaces found:', workspaces?.length || 0);
-
-    if (wsErr) {
-        console.error('[cron/scrape] ❌  Failed to fetch workspaces:', wsErr.message);
-        return res.status(500).json({ error: 'Failed to fetch workspaces', detail: wsErr.message });
-    }
-
-    if (!workspaces || workspaces.length === 0) {
-        console.log('⚠️ No workspaces with keywords found. Exiting.');
-        console.log('[cron/scrape] ℹ️  No workspaces with keywords found. Nothing to scrape.');
+    // 1 ── Fetch workspaces and their connected platforms
+    const { data: workspaces, error: wsErr } = await supabaseAdmin.from('workspaces').select('id, keywords').not('keywords', 'is', null);
+    const { data: profiles } = await supabaseAdmin.from('social_profiles').select('workspace_id, platform');
+    if (wsErr || !workspaces || workspaces.length === 0) {
         return res.json({ inserted: 0, workspaces_scraped: 0 });
     }
-
+    // Group platforms by workspace ID
+    const workspacePlatforms = {};
+    if (profiles) {
+        profiles.forEach(p => {
+            if (!workspacePlatforms[p.workspace_id]) workspacePlatforms[p.workspace_id] = new Set();
+            workspacePlatforms[p.workspace_id].add(p.platform);
+        });
+    }
     let totalInserted = 0;
     let workspacesScraped = 0;
-
-    // 2 ── Process each workspace independently — one failure won't stop the rest
-    await Promise.allSettled(
-        workspaces.map(async (workspace) => {
-            try {
-                const keywords = workspace.keywords.trim();
-                if (!keywords) return;
-
-                console.log(`[cron/scrape] 🔍  Scraping for workspace ${workspace.id}: "${keywords}"`);
-
-                console.log('🚀 Calling Apify for workspace:', workspace.id, 'with keywords:', workspace.keywords);
-                // 2a ── Start the Apify Reddit scraper run
-                const input = {
-                    "searches": [keywords],
-                    "maxItems": 15,
-                    "maxPostCount": 15,
-                    "maxComments": 0,
-                    "maxCommunitiesCount": 0,
-                    "maxUserCount": 0
-                };
-                const run = await apify.actor('trudax/reddit-scraper-lite').call(input, { waitSecs: 120 }); // wait up to 2 min for run to finish
-
-                // 2b ── Fetch the dataset items from the completed run
+    // 2 ── Process workspaces concurrently
+    await Promise.allSettled(workspaces.map(async (workspace) => {
+        // Safely extract and trim keywords, defaulting to empty string if null
+        const keywords = workspace.keywords ? workspace.keywords.trim() : '';
+        // HARD STOP: If keywords are empty after trimming, skip this workspace completely
+        if (!keywords) {
+            console.log(`[cron/scrape] ⏭️  Skipping workspace ${workspace.id}: No valid keywords found.`);
+            return;
+        }
+        const platforms = workspacePlatforms[workspace.id] || new Set(['reddit']); // Default to Reddit
+        const scrapeTasks = [];
+        // � REDDIT SCRAPER
+        if (platforms.has('reddit')) {
+            scrapeTasks.push((async () => {
+                const run = await apify.actor('trudax/reddit-scraper-lite').call({ searches: [keywords], maxItems: 15, maxPostCount: 15 });
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+                return items.filter(i => i.body || i.title).map(item => ({
+                    workspace_id: workspace.id,
+                    platform: 'reddit',
+                    intent_score: 'Medium',
+                    original_post_id: String(item.id || item.parsedId || item.url || Date.now()),
+                    author_handle: String(item.username || item.author || 'Unknown User'),
+                    post_content: String(item.body || item.title || '').substring(0, 1000),
+                    post_url: item.url,
+                    status: 'new'
+                }));
+            })());
+        }
+        // 🔵 TWITTER SCRAPER
+        if (platforms.has('twitter')) {
+            scrapeTasks.push((async () => {
+                const run = await apify.actor('apify/twitter-scraper').call({ searchTerms: [keywords], maxItems: 10 });
+                const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+                return items.filter(i => i.full_text).map(item => ({
+                    workspace_id: workspace.id,
+                    platform: 'twitter',
+                    intent_score: 'Medium',
+                    original_post_id: String(item.id || item.url || Date.now()),
+                    author_handle: String(item.user?.screen_name || 'Unknown User'),
+                    post_content: String(item.full_text || '').substring(0, 1000),
+                    post_url: item.url,
+                    status: 'new'
+                }));
+            })());
+        }
+        // 👔 LINKEDIN SCRAPER
+        if (platforms.has('linkedin')) {
+            scrapeTasks.push((async () => {
+                const run = await apify.actor('curious_coder/linkedin-post-search').call({ searchKeywords: keywords, maxPosts: 10 });
+                const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+                return items.filter(i => i.text).map(item => ({
+                    workspace_id: workspace.id,
+                    platform: 'linkedin',
+                    intent_score: 'Medium',
+                    original_post_id: String(item.urn || item.url || Date.now()),
+                    author_handle: String(item.authorName || 'Unknown User'),
+                    post_content: String(item.text || '').substring(0, 1000),
+                    post_url: item.url,
+                    status: 'new'
+                }));
+            })());
+        }
+        // Wait for all selected platform scrapers to finish for this workspace
+        const results = await Promise.allSettled(scrapeTasks);
 
-                if (!items || items.length === 0) {
-                    console.log(`[cron/scrape] ℹ️  No results for workspace ${workspace.id}`);
-                    return;
-                }
-
-                // 2c ── Map items to the signals table schema
-                const signals = items
-                    .filter((item) => item.body || item.title) // skip empty posts
-                    .map((item) => ({
-                        workspace_id: workspace.id,
-                        platform: 'reddit',
-                        intent_score: 'Medium',
-                        original_post_id: String(item.id || item.parsedId || item.url || Date.now()),
-                        author_handle: String(item.username || item.author || 'Unknown User'),
-                        post_content: String(item.body || item.title || 'No content found').substring(0, 1000),
-                        post_url: item.url,
-                        status: 'new'
-                    }));
-
-                if (signals.length === 0) return;
-
-                // 2d ── Insert into public.signals
-                const { error: insertErr, count } = await supabaseAdmin
-                    .from('signals')
-                    .insert(signals, { count: 'exact' });
-
-                if (insertErr) {
-                    console.error(`[cron/scrape] ❌  Insert failed for workspace ${workspace.id}:`, insertErr.message);
-                    return;
-                }
-
-                const inserted = count ?? signals.length;
-                totalInserted += inserted;
-                workspacesScraped += 1;
-                console.log(`[cron/scrape] ✅  Inserted ${inserted} signals for workspace ${workspace.id}`);
-
-            } catch (err) {
-                console.error('❌ Apify Error:', err.message);
-                console.error(`[cron/scrape] ❌  Error processing workspace ${workspace.id}:`, err?.message ?? err);
+        // Flatten all successful data into one array
+        const signalsToInsert = [];
+        results.forEach(res => {
+            if (res.status === 'fulfilled' && res.value) {
+                signalsToInsert.push(...res.value);
+            } else if (res.status === 'rejected') {
+                console.error(`[cron/scrape] ❌ Platform scrape failed for ws ${workspace.id}:`, res.reason);
             }
-        })
-    );
-
-    console.log(`[cron/scrape] 🏁  Done. ${totalInserted} signals inserted across ${workspacesScraped} workspace(s).`);
-    return res.json({
-        ok: true,
-        inserted: totalInserted,
-        workspaces_scraped: workspacesScraped,
-    });
+        });
+        if (signalsToInsert.length > 0) {
+            const { count } = await supabaseAdmin.from('signals').insert(signalsToInsert, { count: 'exact' });
+            totalInserted += count || signalsToInsert.length;
+            workspacesScraped++;
+        }
+    }));
+    return res.json({ ok: true, inserted: totalInserted, workspaces_scraped: workspacesScraped });
 });
 
 // ── 404 catch-all ────────────────────────────────────────────────────────────

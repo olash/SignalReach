@@ -11,6 +11,7 @@ type Platform = 'reddit' | 'twitter' | 'linkedin';
 type Persona = 'freelancer' | 'saas';
 
 interface FormState {
+    workspaceName: string;
     platforms: Platform[];
     persona: Persona | null;
     twitterHandle: string;
@@ -51,6 +52,7 @@ export default function WelcomePage() {
     const [isSuccess, setIsSuccess] = useState(false);
 
     const [form, setForm] = useState<FormState>({
+        workspaceName: '',
         platforms: [],
         persona: null,
         twitterHandle: '',
@@ -90,9 +92,10 @@ export default function WelcomePage() {
     // ── Redirect on Success ──────────
     useEffect(() => {
         if (isSuccess) {
-            router.push('/dashboard');
+            // Hard redirect forces WorkspaceContext to remount and fetch the new data
+            window.location.href = '/dashboard';
         }
-    }, [isSuccess, router]);
+    }, [isSuccess]);
 
     // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -109,8 +112,8 @@ export default function WelcomePage() {
         setActiveTab(p === 'saas' ? 'url' : 'manual');
     };
 
-    // Step 1 is valid when ≥1 platform AND a persona are both selected
-    const step1Valid = form.platforms.length > 0 && form.persona !== null;
+    // Step 1 is valid when ≥1 platform AND a persona are both selected AND workspaceName is provided
+    const step1Valid = form.workspaceName.trim().length > 0 && form.platforms.length > 0 && form.persona !== null;
 
     // Step 2 is valid when every selected platform has its handle filled in
     const step2Valid = form.platforms.every((p) => {
@@ -128,15 +131,27 @@ export default function WelcomePage() {
             const { data: { user }, error: authErr } = await supabase.auth.getUser();
             if (authErr || !user) throw authErr ?? new Error('Not authenticated');
 
+            let finalKeywords = form.keywords.trim();
+            // If they used the URL tab and didn't provide manual keywords, generate a fallback
+            if (activeTab === 'url' && !finalKeywords && form.websiteUrl) {
+                // Extract the domain name (e.g., "signalreach" from "https://signalreach.com")
+                const domainMatch = form.websiteUrl.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n?]+)/im);
+                const domainName = domainMatch ? domainMatch[1].split('.')[0] : 'product';
+
+                // Create a smart fallback based on their persona
+                const personaText = form.persona === 'saas' ? 'B2B SaaS' : 'Freelance';
+                finalKeywords = `${domainName}, ${personaText}, alternative to ${domainName}, looking for ${personaText}`;
+            }
+
             // 1 ─ Insert workspace
             const { data: workspace, error: wsErr } = await supabase
                 .from('workspaces')
                 .insert({
                     user_id: user.id,
-                    name: 'My Primary Workspace',
+                    name: form.workspaceName.trim() || 'My Workspace',
                     account_type: form.persona,
                     website_url: form.websiteUrl.trim() || null,
-                    keywords: form.keywords.trim() || null,
+                    keywords: finalKeywords || null,
                 })
                 .select('id')
                 .single();
@@ -223,6 +238,16 @@ export default function WelcomePage() {
                         {/* ── STEP 1 — Platforms & Persona ──────────────────────────────── */}
                         {step === 1 && (
                             <div className="flex flex-col gap-6">
+                                <div>
+                                    <label className={labelCls}>Workspace Name <span className="text-red-400">*</span></label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. My Startup"
+                                        value={form.workspaceName}
+                                        onChange={(e) => setForm((f) => ({ ...f, workspaceName: e.target.value }))}
+                                        className={inputCls}
+                                    />
+                                </div>
                                 <div>
                                     <h1 className="text-xl font-semibold text-[#111827] tracking-tight">
                                         Where do your ideal clients hang out?

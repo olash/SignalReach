@@ -20,12 +20,16 @@ interface Signal {
     post_content: string;
     post_url: string | null;
     status: SignalStatus;
+    intent_score: string;
+    created_at: string;
 }
 
 interface PanelProspect {
+    id: string;
     platform: 'reddit' | 'twitter' | 'linkedin';
     handle: string;
     originalPost: string;
+    postUrl: string | null;
 }
 
 // ─── Column configuration ────────────────────────────────────────────────────
@@ -93,6 +97,13 @@ const platformFilters: { id: Platform; label: string; icon: string }[] = [
     { id: 'twitter', label: 'Twitter', icon: 'solar:twitter-linear' },
     { id: 'linkedin', label: 'LinkedIn', icon: 'solar:linkedin-linear' },
 ];
+
+function timeAgo(dateString: string) {
+    const diff = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 60000);
+    if (diff < 60) return `${diff}m ago`;
+    if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+    return `${Math.floor(diff / 1440)}d ago`;
+}
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -177,9 +188,9 @@ export default function DashboardPage() {
         try {
             const { data: rows, error: signalsErr } = await supabase
                 .from('signals')
-                .select('id, workspace_id, platform, author_handle, post_content, post_url, status')
+                .select('id, workspace_id, platform, author_handle, post_content, post_url, status, intent_score, created_at')
                 .eq('workspace_id', activeWorkspace.id)
-                .order('id', { ascending: false });
+                .order('created_at', { ascending: false });
 
             if (signalsErr) {
                 toast.error('Failed to load signals.');
@@ -201,9 +212,11 @@ export default function DashboardPage() {
     // ── Open AI panel ──────────────────────────────────────────────────────────
     const openPanel = (signal: Signal) => {
         setPanelProspect({
+            id: signal.id,
             platform: signal.platform,
             handle: `@${signal.author_handle}`,
             originalPost: signal.post_content,
+            postUrl: signal.post_url
         });
         setPanelOpen(true);
     };
@@ -253,7 +266,12 @@ export default function DashboardPage() {
             {/* ── AI Action Panel ─────────────────────────────────────────────── */}
             <AIActionPanel
                 isOpen={panelOpen}
-                onClose={() => setPanelOpen(false)}
+                onClose={(statusUpdated?: boolean) => {
+                    setPanelOpen(false);
+                    if (statusUpdated) {
+                        fetchSignals();
+                    }
+                }}
                 prospect={panelProspect}
             />
 
@@ -354,6 +372,22 @@ export default function DashboardPage() {
                                                         <p className="text-sm text-gray-700 leading-snug line-clamp-3">
                                                             {lead.post_content}
                                                         </p>
+
+                                                        <div className="flex items-center justify-between pt-2">
+                                                            <div className="flex items-center gap-2">
+                                                                {/* Dynamic Intent Tag */}
+                                                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${lead.intent_score?.toLowerCase() === 'hot'
+                                                                        ? 'bg-red-50 text-red-600 border-red-200'
+                                                                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                                                                    }`}>
+                                                                    {lead.intent_score || 'Warm'}
+                                                                </span>
+                                                                {/* Dynamic Time Ago */}
+                                                                <span className="text-[10px] text-gray-400 font-medium">
+                                                                    {timeAgo(lead.created_at)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
 
                                                         <div className="flex items-center justify-between pt-1 border-t border-gray-50">
                                                             <span className="text-[10px] text-gray-400 font-medium capitalize">{lead.platform}</span>
@@ -462,6 +496,23 @@ export default function DashboardPage() {
                                                             )}
                                                         </div>
                                                         <p className="text-sm text-gray-700 leading-snug line-clamp-3">{lead.post_content}</p>
+
+                                                        <div className="flex items-center justify-between pt-2">
+                                                            <div className="flex items-center gap-2">
+                                                                {/* Dynamic Intent Tag */}
+                                                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${lead.intent_score?.toLowerCase() === 'hot'
+                                                                        ? 'bg-red-50 text-red-600 border-red-200'
+                                                                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                                                                    }`}>
+                                                                    {lead.intent_score || 'Warm'}
+                                                                </span>
+                                                                {/* Dynamic Time Ago */}
+                                                                <span className="text-[10px] text-gray-400 font-medium">
+                                                                    {timeAgo(lead.created_at)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
                                                         <div className="flex items-center justify-between pt-1 border-t border-gray-50">
                                                             <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-medium">Draft ready</span>
                                                             <button
@@ -529,6 +580,23 @@ export default function DashboardPage() {
                                                             <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Replied</span>
                                                         </div>
                                                         <p className="text-sm text-gray-700 leading-snug line-clamp-3 italic">{lead.post_content}</p>
+
+                                                        <div className="flex items-center justify-between pt-2">
+                                                            <div className="flex items-center gap-2">
+                                                                {/* Dynamic Intent Tag */}
+                                                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${lead.intent_score?.toLowerCase() === 'hot'
+                                                                        ? 'bg-red-50 text-red-600 border-red-200'
+                                                                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                                                                    }`}>
+                                                                    {lead.intent_score || 'Warm'}
+                                                                </span>
+                                                                {/* Dynamic Time Ago */}
+                                                                <span className="text-[10px] text-gray-400 font-medium">
+                                                                    {timeAgo(lead.created_at)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
                                                         <div className="flex items-center gap-2 pt-1 border-t border-gray-50">
                                                             {lead.post_url && (
                                                                 <a
