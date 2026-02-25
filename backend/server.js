@@ -185,7 +185,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
         if (platforms.has('reddit')) {
             scrapeTasks.push((async () => {
                 const run = await apify.actor('trudax/reddit-scraper-lite').call({
-                    searches: keywordArray,
+                    searches: keywordArray.map(k => `"${k}"`), // Forces exact phrase match
                     maxItems: 15,
                     maxPostCount: 15,
                     sort: "new",
@@ -234,7 +234,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
                     keywords: rawKeywords,
                     maxResults: 10,
                     datePosted: "past-week", // Strictly limits extraction to the past 7 days
-                    sortBy: "date_posted"
+                    sortBy: "date"
                 });
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
 
