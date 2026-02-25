@@ -10,7 +10,7 @@ import { useWorkspace } from '@/components/WorkspaceContext';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Platform = 'all' | 'reddit' | 'twitter' | 'linkedin';
-type SignalStatus = 'new' | 'drafted' | 'replied' | 'dismissed';
+type SignalStatus = 'new' | 'action_required' | 'engaged' | 'won' | 'lost' | 'discarded';
 
 interface Signal {
     id: string;
@@ -30,6 +30,7 @@ interface PanelProspect {
     handle: string;
     originalPost: string;
     postUrl: string | null;
+    status: SignalStatus;
 }
 
 // ─── Column configuration ────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ const COLUMN_CONFIG: {
             emptyIcon: 'solar:radar-linear',
         },
         {
-            id: 'drafted',
+            id: 'action_required',
             title: 'Action Required',
             icon: 'solar:bell-bing-linear',
             accent: 'text-amber-500',
@@ -62,7 +63,7 @@ const COLUMN_CONFIG: {
             emptyIcon: 'solar:magic-stick-3-linear',
         },
         {
-            id: 'replied',
+            id: 'engaged',
             title: 'Engaged',
             icon: 'solar:chat-round-dots-linear',
             accent: 'text-emerald-500',
@@ -71,7 +72,7 @@ const COLUMN_CONFIG: {
             emptyIcon: 'solar:chat-round-dots-linear',
         },
         {
-            id: 'dismissed',
+            id: 'discarded',
             title: 'Archive / Closed',
             icon: 'solar:archive-linear',
             accent: 'text-gray-400',
@@ -216,7 +217,8 @@ export default function DashboardPage() {
             platform: signal.platform,
             handle: `@${signal.author_handle}`,
             originalPost: signal.post_content,
-            postUrl: signal.post_url
+            postUrl: signal.post_url,
+            status: signal.status
         });
         setPanelOpen(true);
     };
@@ -250,14 +252,17 @@ export default function DashboardPage() {
         }
     };
 
-    // ── Derived columns ────────────────────────────────────────────────────────
-    const byStatus = (status: SignalStatus) =>
-        signals.filter((s) => s.status === status);
+    // ── Filter signals by platform and status ────────────────────────────────
+    const displayedSignals = activeFilter === 'all'
+        ? signals
+        : signals.filter(s => s.platform === activeFilter);
 
-    const filteredNew = () =>
-        byStatus('new').filter(
-            (l) => activeFilter === 'all' || l.platform === activeFilter
-        );
+    const signalsByStatus = {
+        new: displayedSignals.filter(s => s.status === 'new'),
+        action_required: displayedSignals.filter(s => s.status === 'action_required'),
+        engaged: displayedSignals.filter(s => s.status === 'engaged'),
+        discarded: displayedSignals.filter(s => ['won', 'lost', 'discarded'].includes(s.status)),
+    };
 
     // ─────────────────────────────────────────────────────────────────────────
     return (
@@ -377,8 +382,8 @@ export default function DashboardPage() {
                                                             <div className="flex items-center gap-2">
                                                                 {/* Dynamic Intent Tag */}
                                                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${lead.intent_score?.toLowerCase() === 'hot'
-                                                                        ? 'bg-red-50 text-red-600 border-red-200'
-                                                                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                                                                    ? 'bg-red-50 text-red-600 border-red-200'
+                                                                    : 'bg-amber-50 text-amber-600 border-amber-200'
                                                                     }`}>
                                                                     {lead.intent_score || 'Warm'}
                                                                 </span>
@@ -501,8 +506,8 @@ export default function DashboardPage() {
                                                             <div className="flex items-center gap-2">
                                                                 {/* Dynamic Intent Tag */}
                                                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${lead.intent_score?.toLowerCase() === 'hot'
-                                                                        ? 'bg-red-50 text-red-600 border-red-200'
-                                                                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                                                                    ? 'bg-red-50 text-red-600 border-red-200'
+                                                                    : 'bg-amber-50 text-amber-600 border-amber-200'
                                                                     }`}>
                                                                     {lead.intent_score || 'Warm'}
                                                                 </span>
@@ -585,8 +590,8 @@ export default function DashboardPage() {
                                                             <div className="flex items-center gap-2">
                                                                 {/* Dynamic Intent Tag */}
                                                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${lead.intent_score?.toLowerCase() === 'hot'
-                                                                        ? 'bg-red-50 text-red-600 border-red-200'
-                                                                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                                                                    ? 'bg-red-50 text-red-600 border-red-200'
+                                                                    : 'bg-amber-50 text-amber-600 border-amber-200'
                                                                     }`}>
                                                                     {lead.intent_score || 'Warm'}
                                                                 </span>
