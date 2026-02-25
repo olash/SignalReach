@@ -186,7 +186,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
         // 🔵 TWITTER SCRAPER
         if (platforms.has('twitter')) {
             scrapeTasks.push((async () => {
-                const run = await apify.actor('apify/twitter-scraper').call({ searchTerms: [keywords], maxItems: 10 });
+                const run = await apify.actor('apidojo/tweet-scraper').call({ searchTerms: [keywords], maxItems: 10 });
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
                 return items.filter(i => i.full_text).map(item => ({
                     workspace_id: workspace.id,
@@ -203,7 +203,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
         // 👔 LINKEDIN SCRAPER
         if (platforms.has('linkedin')) {
             scrapeTasks.push((async () => {
-                const run = await apify.actor('bebity/linkedin-scraper').call({ urls: [`https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(keywords)}`], maxItems: 10 });
+                const run = await apify.actor('harvestapi/linkedin-post-search').call({ keywords: keywords, maxResults: 10 });
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
                 return items.filter(i => i.text).map(item => ({
                     workspace_id: workspace.id,
