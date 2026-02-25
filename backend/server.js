@@ -227,18 +227,28 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
             })());
         }
 
-        // 👔 LINKEDIN SCRAPER (Using harvestapi/linkedin-post-search)
+        // 👔 LINKEDIN SCRAPER (Parallel searches per keyword)
         if (platforms.has('linkedin')) {
+            const linkedInPromises = keywordArray.map(async (keyword) => {
+                try {
+                    const run = await apify.actor('harvestapi/linkedin-post-search').call({
+                        keywords: keyword,
+                        maxResults: 10,
+                        datePosted: "past-week",
+                        sortBy: "date"
+                    });
+                    const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+                    return items || [];
+                } catch (err) {
+                    console.error(`LinkedIn scrape failed for keyword: ${keyword}`, err);
+                    return [];
+                }
+            });
             scrapeTasks.push((async () => {
-                const run = await apify.actor('harvestapi/linkedin-post-search').call({
-                    keywords: keywordArray.join(' OR '),
-                    maxResults: 10,
-                    datePosted: "past-week", // Strictly limits extraction to the past 7 days
-                    sortBy: "date"
-                });
-                const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+                const resultsArray = await Promise.all(linkedInPromises);
+                const allItems = resultsArray.flat(); // Combine all keyword results
 
-                return items.filter(i => i.text && isRecent(i.postedAt || i.postedDate || i.createdAt || i.date)).map(item => ({
+                return allItems.filter(i => i.text && isRecent(i.postedAt || i.date)).map(item => ({
                     workspace_id: workspace.id,
                     platform: 'linkedin',
                     intent_score: 'Medium',
