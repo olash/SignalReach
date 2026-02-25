@@ -32,7 +32,7 @@ const STATIC_PLACEHOLDERS: Signal[] = [
         author_handle: 'saas_founder_99',
         post_content: 'Looking for alternatives to generic CRMs for my sales team — any recommendations that track intent and help prioritise outreach?',
         post_url: null,
-        status: 'drafted',
+        status: 'action_required',
     },
     {
         id: 'ph-2',
@@ -40,7 +40,7 @@ const STATIC_PLACEHOLDERS: Signal[] = [
         author_handle: 'mikk_builds',
         post_content: 'Tired of cold email tools that just spray-and-pray. Is there a smarter way to find buyers who are already looking?',
         post_url: null,
-        status: 'drafted',
+        status: 'action_required',
     },
     {
         id: 'ph-3',
@@ -48,7 +48,7 @@ const STATIC_PLACEHOLDERS: Signal[] = [
         author_handle: 'carolyn_vp_sales',
         post_content: 'Our sales team is evaluating new prospecting tools this quarter. Would love to hear what is working for others in B2B SaaS.',
         post_url: 'https://www.linkedin.com',
-        status: 'drafted',
+        status: 'action_required',
     },
 ];
 
@@ -99,7 +99,7 @@ export default function InboxPage() {
             .from('signals')
             .select('id, platform, author_handle, post_content, post_url, status')
             .eq('workspace_id', workspaces[0].id)
-            .in('status', ['drafted', 'new'])
+            .in('status', ['action_required', 'new'])
             .order('id', { ascending: false });
 
         if (error || !data?.length) {
@@ -136,7 +136,7 @@ export default function InboxPage() {
 
         const { error } = await supabase
             .from('signals')
-            .update({ status: 'replied' })
+            .update({ status: 'engaged' })
             .eq('id', selected.id);
 
         if (error) {

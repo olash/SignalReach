@@ -22,6 +22,7 @@ interface Signal {
     status: SignalStatus;
     intent_score: string;
     created_at: string;
+    ai_draft?: string | null;
 }
 
 interface PanelProspect {
@@ -31,6 +32,7 @@ interface PanelProspect {
     originalPost: string;
     postUrl: string | null;
     status: SignalStatus;
+    ai_draft?: string | null;
 }
 
 // ─── Column configuration ────────────────────────────────────────────────────
@@ -189,7 +191,7 @@ export default function DashboardPage() {
         try {
             const { data: rows, error: signalsErr } = await supabase
                 .from('signals')
-                .select('id, workspace_id, platform, author_handle, post_content, post_url, status, intent_score, created_at')
+                .select('id, workspace_id, platform, author_handle, post_content, post_url, status, intent_score, created_at, ai_draft')
                 .eq('workspace_id', activeWorkspace.id)
                 .order('created_at', { ascending: false });
 
@@ -218,7 +220,8 @@ export default function DashboardPage() {
             handle: `@${signal.author_handle}`,
             originalPost: signal.post_content,
             postUrl: signal.post_url,
-            status: signal.status
+            status: signal.status,
+            ai_draft: signal.ai_draft
         });
         setPanelOpen(true);
     };
@@ -234,8 +237,8 @@ export default function DashboardPage() {
 
         const snapshot = signals;
 
-        setSignals((prev) =>
-            prev.map((s) => (s.id === signalId ? { ...s, status: newStatus } : s))
+        setSignals((prev: Signal[]) =>
+            prev.map((s: Signal) => (s.id === signalId ? { ...s, status: newStatus } : s))
         );
 
         const { error } = await supabase
@@ -255,13 +258,13 @@ export default function DashboardPage() {
     // ── Filter signals by platform and status ────────────────────────────────
     const displayedSignals = activeFilter === 'all'
         ? signals
-        : signals.filter(s => s.platform === activeFilter);
+        : signals.filter((s: Signal) => s.platform === activeFilter);
 
     const signalsByStatus = {
-        new: displayedSignals.filter(s => s.status === 'new'),
-        action_required: displayedSignals.filter(s => s.status === 'action_required'),
-        engaged: displayedSignals.filter(s => s.status === 'engaged'),
-        discarded: displayedSignals.filter(s => ['won', 'lost', 'discarded'].includes(s.status)),
+        new: displayedSignals.filter((s: Signal) => s.status === 'new'),
+        action_required: displayedSignals.filter((s: Signal) => s.status === 'action_required'),
+        engaged: displayedSignals.filter((s: Signal) => s.status === 'engaged'),
+        discarded: displayedSignals.filter((s: Signal) => ['won', 'lost', 'discarded'].includes(s.status)),
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -311,13 +314,13 @@ export default function DashboardPage() {
 
             {/* ── Kanban Board ─────────────────────────────────────────────────── */}
             <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="flex flex-col md:flex-row md:overflow-x-auto gap-4 pb-4 flex-1 md:items-start">
+                <div className="flex gap-4 overflow-x-auto pb-4 flex-1 items-start snap-x snap-mandatory">
 
                     {/* ── Column: New Signals ─────────────────────────────────────── */}
-                    <div className="w-full md:w-80 md:shrink-0 bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
+                    <div className="min-w-[300px] w-[300px] md:w-80 shrink-0 snap-center bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
                         <ColumnHeader
                             title="New Signals"
-                            count={loading ? undefined : filteredNew().length}
+                            count={loading ? undefined : signalsByStatus.new.length}
                             icon="solar:radar-linear"
                             accent="text-indigo-500"
                         />
@@ -339,7 +342,7 @@ export default function DashboardPage() {
                                         className={`flex flex-col gap-2.5 min-h-[60px] rounded-xl transition-colors duration-150 ${snapshot.isDraggingOver ? 'bg-indigo-50/60' : ''
                                             }`}
                                     >
-                                        {filteredNew().length === 0 && !snapshot.isDraggingOver && (
+                                        {signalsByStatus.new.length === 0 && !snapshot.isDraggingOver && (
                                             <EmptyColumnState
                                                 icon="solar:radar-linear"
                                                 msg="No signals yet."
@@ -347,7 +350,7 @@ export default function DashboardPage() {
                                             />
                                         )}
 
-                                        {filteredNew().map((lead, index) => (
+                                        {signalsByStatus.new.map((lead, index) => (
                                             <Draggable key={lead.id} draggableId={lead.id} index={index}>
                                                 {(drag, dragSnapshot) => (
                                                     <div
@@ -446,10 +449,10 @@ export default function DashboardPage() {
                     </div>
 
                     {/* ── Column: Action Required (drafted) ──────────────────────── */}
-                    <div className="w-full md:w-80 md:shrink-0 bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
+                    <div className="min-w-[300px] w-[300px] md:w-80 shrink-0 snap-center bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
                         <ColumnHeader
                             title="Action Required"
-                            count={loading ? undefined : byStatus('drafted').length}
+                            count={loading ? undefined : signalsByStatus.action_required.length}
                             icon="solar:bell-bing-linear"
                             accent="text-amber-500"
                         />
@@ -459,7 +462,7 @@ export default function DashboardPage() {
                         )}
 
                         {!loading && (
-                            <Droppable droppableId="drafted">
+                            <Droppable droppableId="action_required">
                                 {(provided, snapshot) => (
                                     <div
                                         ref={provided.innerRef}
@@ -467,7 +470,7 @@ export default function DashboardPage() {
                                         className={`flex flex-col gap-2.5 min-h-[60px] rounded-xl transition-colors duration-150 ${snapshot.isDraggingOver ? 'bg-amber-50/60' : ''
                                             }`}
                                     >
-                                        {byStatus('drafted').length === 0 && !snapshot.isDraggingOver && (
+                                        {signalsByStatus.action_required.length === 0 && !snapshot.isDraggingOver && (
                                             <EmptyColumnState
                                                 icon="solar:magic-stick-3-linear"
                                                 msg="No drafts pending."
@@ -475,7 +478,7 @@ export default function DashboardPage() {
                                             />
                                         )}
 
-                                        {byStatus('drafted').map((lead, index) => (
+                                        {signalsByStatus.action_required.map((lead, index) => (
                                             <Draggable key={lead.id} draggableId={lead.id} index={index}>
                                                 {(drag, dragSnapshot) => (
                                                     <div
@@ -541,10 +544,10 @@ export default function DashboardPage() {
                     </div>
 
                     {/* ── Column: Engaged (replied) ───────────────────────────────── */}
-                    <div className="w-full md:w-80 md:shrink-0 bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
+                    <div className="min-w-[300px] w-[300px] md:w-80 shrink-0 snap-center bg-gray-50 rounded-xl p-3 flex flex-col gap-2.5">
                         <ColumnHeader
                             title="Engaged"
-                            count={loading ? undefined : byStatus('replied').length}
+                            count={loading ? undefined : signalsByStatus.engaged.length}
                             icon="solar:chat-round-dots-linear"
                             accent="text-emerald-500"
                         />
@@ -554,7 +557,7 @@ export default function DashboardPage() {
                         )}
 
                         {!loading && (
-                            <Droppable droppableId="replied">
+                            <Droppable droppableId="engaged">
                                 {(provided, snapshot) => (
                                     <div
                                         ref={provided.innerRef}
@@ -562,7 +565,7 @@ export default function DashboardPage() {
                                         className={`flex flex-col gap-2.5 min-h-[60px] rounded-xl transition-colors duration-150 ${snapshot.isDraggingOver ? 'bg-emerald-50/60' : ''
                                             }`}
                                     >
-                                        {byStatus('replied').length === 0 && !snapshot.isDraggingOver && (
+                                        {signalsByStatus.engaged.length === 0 && !snapshot.isDraggingOver && (
                                             <EmptyColumnState
                                                 icon="solar:chat-round-dots-linear"
                                                 msg="No engaged leads."
@@ -570,7 +573,7 @@ export default function DashboardPage() {
                                             />
                                         )}
 
-                                        {byStatus('replied').map((lead, index) => (
+                                        {signalsByStatus.engaged.map((lead, index) => (
                                             <Draggable key={lead.id} draggableId={lead.id} index={index}>
                                                 {(drag, dragSnapshot) => (
                                                     <div
@@ -636,10 +639,10 @@ export default function DashboardPage() {
                     </div>
 
                     {/* ── Column: Archive / Closed (dismissed) ────────────────────── */}
-                    <div className="w-full md:w-80 md:shrink-0 bg-gray-50/60 rounded-xl p-3 flex flex-col gap-2.5 border border-dashed border-gray-200">
+                    <div className="min-w-[300px] w-[300px] shrink-0 snap-center bg-gray-50/60 rounded-xl p-3 flex flex-col gap-2.5 border border-dashed border-gray-200">
                         <ColumnHeader
                             title="Archive / Closed"
-                            count={loading ? undefined : byStatus('dismissed').length}
+                            count={loading ? undefined : signalsByStatus.discarded.length}
                             icon="solar:archive-linear"
                             accent="text-gray-400"
                         />
@@ -650,7 +653,7 @@ export default function DashboardPage() {
                         )}
 
                         {!loading && (
-                            <Droppable droppableId="dismissed">
+                            <Droppable droppableId="discarded">
                                 {(provided, snapshot) => (
                                     <div
                                         ref={provided.innerRef}
@@ -658,7 +661,7 @@ export default function DashboardPage() {
                                         className={`flex flex-col gap-2.5 min-h-[60px] rounded-xl transition-colors duration-150 ${snapshot.isDraggingOver ? 'bg-gray-100/80' : ''
                                             }`}
                                     >
-                                        {byStatus('dismissed').length === 0 && !snapshot.isDraggingOver && (
+                                        {signalsByStatus.discarded.length === 0 && !snapshot.isDraggingOver && (
                                             <div className="border border-dashed border-gray-200 rounded-lg py-5 flex flex-col items-center gap-1.5 text-gray-300">
                                                 {/* @ts-expect-error custom element */}
                                                 <iconify-icon icon="solar:add-circle-linear" class="text-2xl" />
@@ -666,7 +669,7 @@ export default function DashboardPage() {
                                             </div>
                                         )}
 
-                                        {byStatus('dismissed').map((lead, index) => (
+                                        {signalsByStatus.discarded.map((lead, index) => (
                                             <Draggable key={lead.id} draggableId={lead.id} index={index}>
                                                 {(drag, dragSnapshot) => (
                                                     <div

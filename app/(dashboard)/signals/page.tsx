@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Platform = 'reddit' | 'twitter' | 'linkedin';
-type SignalStatus = 'new' | 'drafted' | 'replied' | 'dismissed';
+type SignalStatus = 'new' | 'action_required' | 'engaged' | 'won' | 'lost' | 'discarded';
 
 interface Signal {
     id: string;
@@ -26,11 +26,13 @@ const PLATFORM_META: Record<Platform, { icon: string; color: string; label: stri
     linkedin: { icon: 'solar:linkedin-linear', color: 'text-blue-600', label: 'LinkedIn' },
 };
 
-const STATUS_META: Record<SignalStatus, { label: string; cls: string }> = {
-    new: { label: 'New', cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-    drafted: { label: 'Drafted', cls: 'bg-amber-50 text-amber-600 border-amber-200' },
-    replied: { label: 'Replied', cls: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-    dismissed: { label: 'Closed', cls: 'bg-gray-100 text-gray-400 border-gray-200' },
+const STATUS_META: Record<SignalStatus, { label: string; bg: string; text: string; dot: string }> = {
+    new: { label: 'New', bg: 'bg-indigo-50/80', text: 'text-indigo-700', dot: 'bg-indigo-500' },
+    action_required: { label: 'Action Required', bg: 'bg-amber-50/80', text: 'text-amber-700', dot: 'bg-amber-500' },
+    engaged: { label: 'Engaged', bg: 'bg-emerald-50/80', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+    won: { label: 'Won', bg: 'bg-blue-50/80', text: 'text-blue-700', dot: 'bg-blue-500' },
+    lost: { label: 'Lost', bg: 'bg-orange-50/80', text: 'text-orange-700', dot: 'bg-orange-500' },
+    discarded: { label: 'Discarded', bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
 };
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -185,7 +187,10 @@ export default function SignalsPage() {
 
                             {/* Status */}
                             <div className="flex items-center">
-                                <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${s.cls}`}>{s.label}</span>
+                                <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border border-transparent ${s.bg} ${s.text}`}>
+                                    <span className={`w-2 h-2 rounded-full ${s.dot}`} />
+                                    {s.label}
+                                </span>
                             </div>
 
                             {/* Link */}

@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 
 // ─── Page — mirrors index.html exactly ────────────────────────────────────────
 
 export default function LandingPage() {
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     return (
         <div className="bg-[#F9FAFB] text-[#111827] antialiased flex flex-col min-h-screen">
 
@@ -25,12 +27,38 @@ export default function LandingPage() {
                         </Link>
                         <Link
                             href="/dashboard"
-                            className="text-sm font-medium bg-[#4F46E5] text-white px-4 py-2 rounded-lg hover:bg-[#4338CA] hover:-translate-y-0.5 shadow-sm hover:shadow-md transition-all"
+                            className="hidden md:flex text-sm font-medium bg-[#4F46E5] text-white px-4 py-2 rounded-lg hover:bg-[#4338CA] hover:-translate-y-0.5 shadow-sm hover:shadow-md transition-all"
+                        >
+                            Get Started
+                        </Link>
+                        <button
+                            className="md:hidden flex items-center justify-center p-2 text-gray-500 hover:text-gray-900"
+                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                        >
+                            {/* @ts-expect-error custom element */}
+                            <iconify-icon icon={isMobileMenuOpen ? "solar:close-circle-linear" : "solar:hamburger-menu-linear"} class="text-2xl" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Mobile Menu Overlay */}
+                {isMobileMenuOpen && (
+                    <div className="md:hidden absolute top-16 left-0 right-0 bg-white border-b border-gray-200 px-6 py-6 flex flex-col gap-4 shadow-xl z-50 animate-in slide-in-from-top-2 duration-200">
+                        <a href="#" className="text-base font-medium text-gray-600 hover:text-[#111827]">Product</a>
+                        <a href="#" className="text-base font-medium text-gray-600 hover:text-[#111827]">Customers</a>
+                        <a href="#" className="text-base font-medium text-gray-600 hover:text-[#111827]">Pricing</a>
+                        <hr className="border-gray-100 my-2" />
+                        <Link href="/dashboard" className="text-base font-medium text-gray-600 hover:text-[#111827]">
+                            Log in
+                        </Link>
+                        <Link
+                            href="/dashboard"
+                            className="text-center text-sm font-medium bg-[#4F46E5] text-white px-4 py-3 rounded-lg hover:bg-[#4338CA] shadow-sm transition-colors mt-2"
                         >
                             Get Started
                         </Link>
                     </div>
-                </div>
+                )}
             </nav>
 
             <main className="flex-grow">

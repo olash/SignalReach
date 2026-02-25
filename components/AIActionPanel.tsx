@@ -19,6 +19,7 @@ export interface AIActionPanelProps {
         originalPost: string;
         postUrl: string | null; // Need URL to open
         status: string; // Dynamic pipeline stage
+        ai_draft?: string | null; // Saved AI draft
         /** Override for the timezone alert text */
         timezoneNote?: string;
     };
@@ -95,11 +96,16 @@ export default function AIActionPanel({
 
     // Reset state when a new signal is selected
     useEffect(() => {
-        setDrafts([]);
-        setCurrentDraftIndex(0);
+        if (prospect?.ai_draft) {
+            setDrafts([prospect.ai_draft]);
+            setCurrentDraftIndex(0);
+        } else {
+            setDrafts([]);
+            setCurrentDraftIndex(0);
+        }
         setInstructions('');
         setTone('Friendly');
-    }, [prospect?.id, isOpen]); // Also clear when opened
+    }, [prospect?.id, prospect?.ai_draft, isOpen]); // Also clear when opened
 
     // Lock body scroll while open
     useEffect(() => {
@@ -110,6 +116,19 @@ export default function AIActionPanel({
     }, [isOpen]);
 
     // ── Handlers ────────────────────────────────────────────────────────────────
+
+    const saveDraftToDatabase = async (draftText: string) => {
+        if (!prospect?.id) return;
+        try {
+            const { error } = await supabase
+                .from('signals')
+                .update({ ai_draft: draftText })
+                .eq('id', prospect.id);
+            if (error) console.error("Error saving draft:", error);
+        } catch (err) {
+            console.error("Failed to save draft", err);
+        }
+    };
 
     const handleGenerate = async () => {
         if (!prospect?.originalPost) return;
@@ -138,6 +157,7 @@ export default function AIActionPanel({
                 const newDrafts = [...drafts, data.draft];
                 setDrafts(newDrafts);
                 setCurrentDraftIndex(newDrafts.length - 1); // Jump to newest draft
+                await saveDraftToDatabase(data.draft);
                 toast('✨ New draft generated!', { duration: 2000 });
             }
         } catch (err) {
@@ -160,6 +180,7 @@ export default function AIActionPanel({
         const updatedDrafts = [...drafts];
         updatedDrafts[currentDraftIndex] = e.target.value;
         setDrafts(updatedDrafts);
+        saveDraftToDatabase(e.target.value);
     };
 
     const updateSignalStatus = async (newStatus: SignalStatus) => {
@@ -246,7 +267,7 @@ export default function AIActionPanel({
                 role="dialog"
                 aria-modal="true"
                 aria-label="AI Reply Panel"
-                className={`fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'
+                className={`fixed inset-y-0 right-0 z-50 w-full sm:w-[450px] md:w-[500px] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'
                     }`}
             >
                 {/* ── Header ────────────────────────────────────────────────────────── */}
