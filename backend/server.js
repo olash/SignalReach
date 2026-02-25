@@ -185,7 +185,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
         if (platforms.has('reddit')) {
             scrapeTasks.push((async () => {
                 const run = await apify.actor('trudax/reddit-scraper-lite').call({
-                    searches: keywordArray.map(k => `"${k}"`), // Forces exact phrase match
+                    searches: keywordArray,
                     maxItems: 15,
                     maxPostCount: 15,
                     sort: "new",
@@ -231,7 +231,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
         if (platforms.has('linkedin')) {
             scrapeTasks.push((async () => {
                 const run = await apify.actor('harvestapi/linkedin-post-search').call({
-                    keywords: rawKeywords,
+                    keywords: keywordArray.join(' OR '),
                     maxResults: 10,
                     datePosted: "past-week", // Strictly limits extraction to the past 7 days
                     sortBy: "date"
