@@ -77,33 +77,26 @@ export default function AIActionPanel({
     onClose,
     prospect,
 }: AIActionPanelProps) {
-    const [tone, setTone] = useState<Tone>('Friendly');
-    const [customInstructions, setCustomInstructions] = useState('');
-    const [draftIndex, setDraftIndex] = useState(0);
-    const [draftText, setDraftText] = useState(MOCK_DRAFTS[0]);
-    const [isRegenerating, setIsRegenerating] = useState(false);
+    const [drafts, setDrafts] = useState<string[]>([]);
+    const [currentDraftIndex, setCurrentDraftIndex] = useState(0);
+    const [tone, setTone] = useState<string>('Friendly');
+    const [instructions, setInstructions] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
 
     const platform = prospect?.platform ?? 'twitter';
     const pc = platformConfig[platform];
     const charLimit = pc.limit;
-    const charCount = draftText.length;
+    const currentDraft = drafts[currentDraftIndex] || '';
+    const charCount = currentDraft.length;
     const overLimit = charLimit !== null && charCount > charLimit;
 
-    // Reset state whenever panel opens
+    // Reset state when a new signal is selected
     useEffect(() => {
-        if (isOpen) {
-            setDraftIndex(0);
-            setDraftText(MOCK_DRAFTS[0]);
-            setCustomInstructions('');
-            setTone('Friendly');
-        }
-    }, [isOpen]);
-
-    // Sync draft text when version index changes
-    useEffect(() => {
-        setDraftText(MOCK_DRAFTS[draftIndex]);
-    }, [draftIndex]);
+        setDrafts([]);
+        setCurrentDraftIndex(0);
+        setInstructions('');
+        setTone('Friendly');
+    }, [prospect?.id, isOpen]); // Also clear when opened
 
     // Lock body scroll while open
     useEffect(() => {
@@ -115,23 +108,19 @@ export default function AIActionPanel({
 
     // ── Handlers ────────────────────────────────────────────────────────────────
 
-    // ── Live AI generation ────────────────────────────────────────────────────
-    const generateDraft = async () => {
+    const handleGenerate = async () => {
         if (!prospect?.originalPost) return;
-
         setIsGenerating(true);
         try {
             const res = await fetch(
-                process.env.NEXT_PUBLIC_BACKEND_URL
-                    ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/generate-draft`
-                    : 'http://localhost:8080/api/generate-draft',
+                `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080'}/api/generate-draft`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        postContext: prospect.originalPost,
-                        platform: prospect.platform,
-                        tone: tone.toLowerCase(),
+                        post_content: prospect.originalPost,
+                        tone,
+                        instructions,
                     }),
                 }
             );
@@ -141,43 +130,38 @@ export default function AIActionPanel({
                 throw new Error(err?.error ?? `Server error ${res.status}`);
             }
 
-            const { draft } = await res.json();
-            setDraftText(draft ?? '');
-            toast('✨ New draft generated!', { duration: 2000 });
+            const data = await res.json();
+            if (data.draft) {
+                const newDrafts = [...drafts, data.draft];
+                setDrafts(newDrafts);
+                setCurrentDraftIndex(newDrafts.length - 1); // Jump to newest draft
+                toast('✨ New draft generated!', { duration: 2000 });
+            }
         } catch (err) {
-            console.error('[AIActionPanel] generateDraft error:', err);
+            console.error('[AIActionPanel] handleGenerate error:', err);
             toast.error('The AI took a nap. 💤 Please try again.');
         } finally {
             setIsGenerating(false);
         }
     };
 
-    const handleRegenerate = async () => {
-        // If we have a real prospect, call the live backend
-        if (prospect?.originalPost) {
-            await generateDraft();
-            return;
-        }
-        // Fallback: cycle through mock drafts when no prospect is provided
-        setIsRegenerating(true);
-        await new Promise((r) => setTimeout(r, 900));
-        const next = (draftIndex + 1) % MOCK_DRAFTS.length;
-        setDraftIndex(next);
-        setIsRegenerating(false);
-        toast('✨ New draft generated!', { duration: 2000 });
+    const nextDraft = () => {
+        if (currentDraftIndex < drafts.length - 1) setCurrentDraftIndex((prev) => prev + 1);
     };
 
-    const handlePrevDraft = () => {
-        setDraftIndex((prev) => (prev - 1 + MOCK_DRAFTS.length) % MOCK_DRAFTS.length);
+    const prevDraft = () => {
+        if (currentDraftIndex > 0) setCurrentDraftIndex((prev) => prev - 1);
     };
 
-    const handleNextDraft = () => {
-        setDraftIndex((prev) => (prev + 1) % MOCK_DRAFTS.length);
+    const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const updatedDrafts = [...drafts];
+        updatedDrafts[currentDraftIndex] = e.target.value;
+        setDrafts(updatedDrafts);
     };
 
     const handleCopyAndEngage = async () => {
         try {
-            await navigator.clipboard.writeText(draftText);
+            await navigator.clipboard.writeText(currentDraft);
         } catch {
             console.warn('Clipboard write failed.');
         }
@@ -289,18 +273,22 @@ export default function AIActionPanel({
                             Draft Tone
                         </label>
                         <div className="flex gap-2 flex-wrap">
-                            {TONES.map((t) => (
+                            {[
+                                { name: 'Friendly', icon: 'solar:emoji-funny-square-linear' },
+                                { name: 'Professional', icon: 'solar:user-id-linear' },
+                                { name: 'Challenger', icon: 'solar:fire-linear' }
+                            ].map(t => (
                                 <button
-                                    key={t}
-                                    onClick={() => setTone(t)}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ${tone === t
-                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+                                    key={t.name}
+                                    onClick={() => setTone(t.name)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ${tone === t.name
+                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                            : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-800'
                                         }`}
                                 >
-                                    {/* @ts-expect-error – iconify-icon is a custom element */}
-                                    <iconify-icon icon={toneIcons[t]} class="text-sm" />
-                                    {t}
+                                    {/* @ts-expect-error custom element */}
+                                    <iconify-icon icon={t.icon} class="text-sm"></iconify-icon>
+                                    {t.name}
                                 </button>
                             ))}
                         </div>
@@ -313,11 +301,11 @@ export default function AIActionPanel({
                             <span className="text-gray-400 font-normal">(optional)</span>
                         </label>
                         <input
-                            type="text"
                             placeholder="e.g., mention the free audit, keep it under 2 sentences…"
-                            value={customInstructions}
-                            onChange={(e) => setCustomInstructions(e.target.value)}
                             className="w-full px-3.5 py-2.5 text-sm text-gray-800 bg-[#F9FAFB] border border-gray-200 rounded-lg placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all duration-200"
+                            type="text"
+                            value={instructions}
+                            onChange={(e) => setInstructions(e.target.value)}
                         />
                     </div>
 
@@ -325,7 +313,7 @@ export default function AIActionPanel({
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
                             <p className="text-xs font-medium text-gray-500">AI Draft</p>
-                            {isRegenerating && (
+                            {isGenerating && (
                                 <span className="text-[10px] text-indigo-500 flex items-center gap-1 animate-pulse">
                                     {/* @ts-expect-error – iconify-icon is a custom element */}
                                     <iconify-icon
@@ -338,15 +326,12 @@ export default function AIActionPanel({
                         </div>
 
                         <textarea
-                            value={isGenerating ? '' : draftText}
-                            onChange={(e) => setDraftText(e.target.value)}
-                            disabled={isGenerating}
-                            placeholder={isGenerating ? 'Gemini is drafting your reply…' : undefined}
                             rows={6}
-                            className={`w-full px-3.5 py-3 h-40 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none transition-all duration-200 leading-relaxed ${isGenerating
-                                ? 'text-indigo-400 italic placeholder:text-indigo-300 bg-indigo-50/40 cursor-not-allowed'
-                                : 'text-gray-800 bg-white'
-                                }`}
+                            className="w-full px-3.5 py-3 h-40 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none transition-all duration-200 leading-relaxed text-gray-800 bg-white"
+                            value={drafts[currentDraftIndex] || ""}
+                            onChange={handleDraftChange}
+                            placeholder={isGenerating ? "Generating draft..." : ""}
+                            disabled={drafts.length === 0 && !isGenerating}
                         />
 
                         {/* Platform-Aware Character Counter */}
@@ -379,40 +364,35 @@ export default function AIActionPanel({
 
                     {/* Left: Regenerate + version navigation */}
                     <div className="flex items-center gap-1.5">
-                        {/* Regenerate button */}
                         <button
-                            onClick={handleRegenerate}
-                            disabled={isRegenerating || isGenerating}
+                            onClick={handleGenerate}
+                            disabled={isGenerating}
                             className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150"
                         >
-                            {/* @ts-expect-error – iconify-icon is a custom element */}
-                            <iconify-icon
-                                icon={isGenerating ? 'solar:spinner-linear' : 'solar:refresh-linear'}
-                                class={`text-sm ${isRegenerating || isGenerating ? 'animate-spin' : ''}`}
-                            />
-                            {isGenerating ? 'Generating…' : 'Regenerate'}
+                            {/* @ts-expect-error custom element */}
+                            <iconify-icon icon="solar:refresh-linear" class={`text-sm ${isGenerating ? 'animate-spin' : ''}`}></iconify-icon>
+                            {drafts.length === 0 ? "Generate Draft" : "Regenerate"}
                         </button>
 
-                        {/* Version arrows: < 1 of 3 > */}
                         <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden divide-x divide-gray-200">
                             <button
-                                onClick={handlePrevDraft}
-                                aria-label="Previous draft"
-                                className="px-2 py-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+                                onClick={prevDraft}
+                                disabled={currentDraftIndex === 0}
+                                className={`px-2 py-2 transition-colors ${currentDraftIndex === 0 ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'}`}
                             >
-                                {/* @ts-expect-error – iconify-icon is a custom element */}
-                                <iconify-icon icon="solar:alt-arrow-left-linear" class="text-xs" />
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:alt-arrow-left-linear" class="text-xs"></iconify-icon>
                             </button>
                             <span className="text-[10px] text-gray-500 font-medium px-2 py-2 tabular-nums whitespace-nowrap select-none bg-white">
-                                {draftIndex + 1} of {MOCK_DRAFTS.length}
+                                {drafts.length > 0 ? `${currentDraftIndex + 1} of ${drafts.length}` : '0 of 0'}
                             </span>
                             <button
-                                onClick={handleNextDraft}
-                                aria-label="Next draft"
-                                className="px-2 py-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+                                onClick={nextDraft}
+                                disabled={currentDraftIndex === drafts.length - 1 || drafts.length === 0}
+                                className={`px-2 py-2 transition-colors ${currentDraftIndex === drafts.length - 1 || drafts.length === 0 ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'}`}
                             >
-                                {/* @ts-expect-error – iconify-icon is a custom element */}
-                                <iconify-icon icon="solar:alt-arrow-right-linear" class="text-xs" />
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:alt-arrow-right-linear" class="text-xs"></iconify-icon>
                             </button>
                         </div>
                     </div>

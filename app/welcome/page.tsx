@@ -47,6 +47,7 @@ export default function WelcomePage() {
     // Start at step 1 directly — auth already handled by AuthContext
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [activeTab, setActiveTab] = useState<'url' | 'manual'>('url');
     const [sessionChecked, setSessionChecked] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
@@ -122,6 +123,29 @@ export default function WelcomePage() {
         if (p === 'linkedin') return form.linkedinUrl.trim().length > 0;
         return true;
     });
+
+    const handleAutoGenerate = async () => {
+        if (!form.workspaceName) return toast.error("Please enter a workspace name or niche in Step 1 first!");
+        setIsGenerating(true);
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080'}/api/generate-keywords`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ niche: form.workspaceName })
+            });
+            const data = await res.json();
+            if (data.keywords) {
+                setForm((f) => ({ ...f, keywords: data.keywords }));
+                toast.success('Keywords generated!');
+            } else {
+                toast.error('Failed to generate keywords.');
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error('Failed to connect to AI generator.');
+        }
+        setIsGenerating(false);
+    };
 
     // ── Complete Onboarding ────────────────────────────────────────────────────
 
@@ -491,7 +515,26 @@ export default function WelcomePage() {
 
                                     {activeTab === 'manual' && (
                                         <div className="flex flex-col gap-2">
-                                            <label className={labelCls}>Target keywords</label>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className={labelCls}>Target keywords</label>
+                                                <button
+                                                    onClick={handleAutoGenerate}
+                                                    disabled={isGenerating}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-indigo-200"
+                                                >
+                                                    {isGenerating ? (
+                                                        <>
+                                                            {/* @ts-expect-error custom element */}
+                                                            <iconify-icon icon="solar:spinner-linear" class="animate-spin text-sm" />
+                                                            Generating...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            ✨ Auto-Generate with AI
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
                                             <textarea
                                                 rows={3}
                                                 placeholder="e.g. freelance developer, web design for startups, hire a designer…"

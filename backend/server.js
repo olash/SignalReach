@@ -297,39 +297,50 @@ app.get('/', (_req, res) => {
 });
 
 /**
+ * POST /api/generate-keywords
+ * AI Keyword Generation Route
+ */
+app.post('/api/generate-keywords', async (req, res) => {
+    try {
+        const { niche } = req.body;
+        if (!niche) return res.status(400).json({ error: 'Niche is required' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const prompt = `You are an expert lead generation specialist. The user is looking for clients on Twitter, Reddit, and LinkedIn. Their niche/goal is: "${niche}". 
+        Generate exactly 4 short, high-intent search phrases to find buyers. Focus on pain points or direct hiring intent (e.g., "need a UX audit", "users are dropping off", "hiring a designer"). 
+        CRITICAL: Return ONLY a comma-separated list. No bullet points, no quotes, no extra text.`;
+
+        const result = await model.generateContent(prompt);
+        const keywords = result.response.text().trim();
+
+        res.json({ keywords });
+    } catch (error) {
+        console.error('AI Keyword Error:', error);
+        res.status(500).json({ error: 'Failed to generate keywords' });
+    }
+});
+
+/**
  * POST /api/generate-draft
  * Body: { postContext: string, platform: string, tone: string }
  * Returns: { draft: string }
  */
 app.post('/api/generate-draft', async (req, res) => {
-    const { postContext, platform, tone } = req.body;
-
-    // ── Input validation ──
-    if (!postContext || typeof postContext !== 'string' || !postContext.trim()) {
-        return res.status(400).json({ error: 'postContext is required and must be a non-empty string.' });
-    }
-    if (!platform || typeof platform !== 'string') {
-        return res.status(400).json({ error: 'platform is required (e.g. twitter, reddit, linkedin).' });
-    }
-    if (!tone || typeof tone !== 'string') {
-        return res.status(400).json({ error: 'tone is required (e.g. friendly, professional, challenger).' });
-    }
-
-    const prompt = buildPrompt(postContext.trim(), platform.trim(), tone.trim());
-
     try {
+        const { post_content, tone, instructions } = req.body;
+        if (!post_content) return res.status(400).json({ error: 'Post content required' });
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const draft = response.text().trim();
+        let prompt = `You are an expert sales development rep. A prospect posted this on social media:\n\n"${post_content}"\n\nWrite a short, highly personalized direct message to pitch a freelance design or UX service.`;
 
-        return res.json({ draft });
-    } catch (err) {
-        console.error('[SignalReach] Gemini error:', err?.message ?? err);
-        return res.status(500).json({
-            error: 'The AI took a nap. 💤 Please try regenerating.',
-        });
+        if (tone) prompt += `\nUse a ${tone} tone.`;
+        if (instructions) prompt += `\nAdditional instructions from the user: ${instructions}`;
+
+        prompt += `\n\nReturn ONLY the exact message text to send. Keep it natural, under 3 sentences, and do NOT include quotes or intro text.`;
+        const result = await model.generateContent(prompt);
+        res.json({ draft: result.response.text().trim() });
+    } catch (error) {
+        console.error('AI Draft Error:', error);
+        res.status(500).json({ error: 'Failed to generate draft' });
     }
 });
 
