@@ -185,7 +185,7 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
         if (platforms.has('reddit')) {
             scrapeTasks.push((async () => {
                 const run = await apify.actor('trudax/reddit-scraper-lite').call({
-                    searches: keywordArray,
+                    searches: keywordArray.map(k => `"${k}"`), // Forces exact phrase match natively
                     maxItems: 15,
                     maxPostCount: 15,
                     sort: "new",
@@ -232,10 +232,8 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
             const linkedInPromises = keywordArray.map(async (keyword) => {
                 try {
                     const run = await apify.actor('harvestapi/linkedin-post-search').call({
-                        keywords: keyword,
-                        maxResults: 10,
-                        datePosted: "past-week",
-                        sortBy: "date"
+                        keywords: `"${keyword}"`, // Forces LinkedIn native exact match
+                        maxResults: 10
                     });
                     const { items } = await apify.dataset(run.defaultDatasetId).listItems();
                     return items || [];
