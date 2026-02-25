@@ -18,10 +18,13 @@ export interface AIActionPanelProps {
         handle: string;
         originalPost: string;
         postUrl: string | null; // Need URL to open
+        status: string; // Dynamic pipeline stage
         /** Override for the timezone alert text */
         timezoneNote?: string;
     };
 }
+
+export type SignalStatus = 'new' | 'action_required' | 'engaged' | 'won' | 'lost' | 'discarded';
 
 type Tone = 'Friendly' | 'Professional' | 'Challenger';
 
@@ -159,6 +162,53 @@ export default function AIActionPanel({
         setDrafts(updatedDrafts);
     };
 
+    const updateSignalStatus = async (newStatus: SignalStatus) => {
+        if (!prospect?.id) return;
+
+        // Trigger confetti ONLY if status is 'won'
+        if (newStatus === 'won') {
+            import('canvas-confetti').then((confetti) => {
+                confetti.default({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#4F46E5', '#10B981', '#F59E0B']
+                });
+            });
+        }
+
+        const { error } = await supabase
+            .from('signals')
+            .update({ status: newStatus })
+            .eq('id', prospect.id);
+
+        if (error) {
+            toast.error('Failed to update status.');
+            console.error('Status update error:', error);
+            return;
+        }
+
+        toast.success(`Marked as ${newStatus.replace('_', ' ')}!`);
+        onClose(true); // Tell parent to refresh data
+    };
+
+    const handleDeletePermanently = async () => {
+        if (!prospect?.id) return;
+
+        const { error } = await supabase
+            .from('signals')
+            .delete()
+            .eq('id', prospect.id);
+
+        if (error) {
+            toast.error('Failed to delete signal.');
+            return;
+        }
+
+        toast.success('Signal deleted permanently.');
+        onClose(true);
+    };
+
     const handleCopyAndEngage = async () => {
         try {
             await navigator.clipboard.writeText(currentDraft);
@@ -171,22 +221,9 @@ export default function AIActionPanel({
             window.open(prospect.postUrl, '_blank', 'noopener,noreferrer');
         }
 
-        // 2. Update the database status to 'replied'
-        if (prospect?.id) {
-            const { error } = await supabase
-                .from('signals')
-                .update({ status: 'replied' })
-                .eq('id', prospect.id);
-
-            if (error) {
-                toast.error('Failed to update status.');
-                console.error('Status update error:', error);
-                return;
-            }
-        }
-
+        // 2. Update to 'engaged'
+        await updateSignalStatus('engaged');
         toast.success('Copied! Now paste your reply in the new tab.');
-        onClose(true); // Tell parent to refresh data
     };
 
 
@@ -282,8 +319,8 @@ export default function AIActionPanel({
                                     key={t.name}
                                     onClick={() => setTone(t.name)}
                                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ${tone === t.name
-                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                                            : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-800'
                                         }`}
                                 >
                                     {/* @ts-expect-error custom element */}
@@ -361,52 +398,125 @@ export default function AIActionPanel({
 
                 {/* ── Action Bar ────────────────────────────────────────────────────── */}
                 <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3 shrink-0 bg-white">
-
-                    {/* Left: Regenerate + version navigation */}
-                    <div className="flex items-center gap-1.5">
-                        <button
-                            onClick={handleGenerate}
-                            disabled={isGenerating}
-                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150"
-                        >
-                            {/* @ts-expect-error custom element */}
-                            <iconify-icon icon="solar:refresh-linear" class={`text-sm ${isGenerating ? 'animate-spin' : ''}`}></iconify-icon>
-                            {drafts.length === 0 ? "Generate Draft" : "Regenerate"}
-                        </button>
-
-                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden divide-x divide-gray-200">
-                            <button
-                                onClick={prevDraft}
-                                disabled={currentDraftIndex === 0}
-                                className={`px-2 py-2 transition-colors ${currentDraftIndex === 0 ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'}`}
-                            >
-                                {/* @ts-expect-error custom element */}
-                                <iconify-icon icon="solar:alt-arrow-left-linear" class="text-xs"></iconify-icon>
-                            </button>
-                            <span className="text-[10px] text-gray-500 font-medium px-2 py-2 tabular-nums whitespace-nowrap select-none bg-white">
-                                {drafts.length > 0 ? `${currentDraftIndex + 1} of ${drafts.length}` : '0 of 0'}
-                            </span>
-                            <button
-                                onClick={nextDraft}
-                                disabled={currentDraftIndex === drafts.length - 1 || drafts.length === 0}
-                                className={`px-2 py-2 transition-colors ${currentDraftIndex === drafts.length - 1 || drafts.length === 0 ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'}`}
-                            >
-                                {/* @ts-expect-error custom element */}
-                                <iconify-icon icon="solar:alt-arrow-right-linear" class="text-xs"></iconify-icon>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Right: Primary CTA */}
-                    <button
-                        onClick={handleCopyAndEngage}
-                        disabled={overLimit}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 shadow-sm whitespace-nowrap"
-                    >
-                        {/* @ts-expect-error – iconify-icon is a custom element */}
-                        <iconify-icon icon="solar:copy-linear" class="text-sm" />
-                        Copy &amp; Mark Engaged
-                    </button>
+                    {(() => {
+                        switch (prospect?.status) {
+                            case 'new':
+                                return (
+                                    <>
+                                        <button
+                                            onClick={() => updateSignalStatus('discarded')}
+                                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all"
+                                        >
+                                            {/* @ts-expect-error custom element */}
+                                            <iconify-icon icon="solar:trash-bin-trash-linear" class="text-sm" />
+                                            Discard
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                await handleGenerate();
+                                                updateSignalStatus('action_required');
+                                            }}
+                                            disabled={isGenerating}
+                                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-all"
+                                        >
+                                            {/* @ts-expect-error custom element */}
+                                            <iconify-icon icon="solar:magic-stick-3-linear" class="text-sm" />
+                                            Generate Draft
+                                        </button>
+                                    </>
+                                );
+                            case 'action_required':
+                                return (
+                                    <>
+                                        <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                                            <button
+                                                onClick={handleGenerate}
+                                                disabled={isGenerating}
+                                                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 shrink-0"
+                                            >
+                                                {/* @ts-expect-error custom element */}
+                                                <iconify-icon icon="solar:refresh-linear" class={`text-sm ${isGenerating ? 'animate-spin' : ''}`} />
+                                                Regenerate Draft
+                                            </button>
+                                            <button
+                                                onClick={() => updateSignalStatus('discarded')}
+                                                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg shrink-0"
+                                            >
+                                                Send to Archive
+                                            </button>
+                                        </div>
+                                        <button
+                                            onClick={handleCopyAndEngage}
+                                            disabled={overLimit || drafts.length === 0}
+                                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shrink-0"
+                                        >
+                                            {/* @ts-expect-error custom element */}
+                                            <iconify-icon icon="solar:copy-linear" class="text-sm" />
+                                            Copy & Mark Engaged
+                                        </button>
+                                    </>
+                                );
+                            case 'engaged':
+                                return (
+                                    <>
+                                        <div className="flex items-center gap-1.5">
+                                            <button
+                                                onClick={() => updateSignalStatus('lost')}
+                                                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg"
+                                            >
+                                                {/* @ts-expect-error custom element */}
+                                                <iconify-icon icon="solar:close-circle-linear" class="text-sm" />
+                                                Mark as Lost
+                                            </button>
+                                            <button
+                                                onClick={handleGenerate}
+                                                disabled={isGenerating}
+                                                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 bg-indigo-50/50"
+                                            >
+                                                Draft Follow-up
+                                            </button>
+                                        </div>
+                                        <button
+                                            onClick={() => updateSignalStatus('won')}
+                                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-lg"
+                                        >
+                                            {/* @ts-expect-error custom element */}
+                                            <iconify-icon icon="solar:cup-star-linear" class="text-sm" />
+                                            Mark as Won
+                                        </button>
+                                    </>
+                                );
+                            case 'won':
+                            case 'lost':
+                            case 'discarded':
+                                return (
+                                    <>
+                                        <button
+                                            onClick={handleDeletePermanently}
+                                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all"
+                                        >
+                                            {/* @ts-expect-error custom element */}
+                                            <iconify-icon icon="solar:trash-bin-trash-linear" class="text-sm" />
+                                            Delete Permanently
+                                        </button>
+                                        <button
+                                            onClick={() => updateSignalStatus('engaged')}
+                                            className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                        >
+                                            {/* @ts-expect-error custom element */}
+                                            <iconify-icon icon="solar:restart-linear" class="text-sm" />
+                                            Restore to Pipeline
+                                        </button>
+                                    </>
+                                );
+                            default:
+                                return (
+                                    <div className="text-xs text-gray-400 italic">
+                                        Status unknown
+                                    </div>
+                                );
+                        }
+                    })()}
                 </div>
             </div>
         </>
