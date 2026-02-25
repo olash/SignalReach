@@ -183,36 +183,39 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
                 }));
             })());
         }
-        // 🔵 TWITTER SCRAPER
+        // 🔵 TWITTER SCRAPER (Using apidojo/tweet-scraper)
         if (platforms.has('twitter')) {
             scrapeTasks.push((async () => {
                 const run = await apify.actor('apidojo/tweet-scraper').call({ searchTerms: [keywords], maxItems: 10 });
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
-                return items.filter(i => i.full_text).map(item => ({
+
+                return items.filter(i => i.text || i.full_text).map(item => ({
                     workspace_id: workspace.id,
                     platform: 'twitter',
                     intent_score: 'Medium',
                     original_post_id: String(item.id || item.url || Date.now()),
-                    author_handle: String(item.user?.screen_name || 'Unknown User'),
-                    post_content: String(item.full_text || '').substring(0, 1000),
+                    author_handle: String(item.author?.userName || item.user?.screen_name || 'Unknown User'),
+                    post_content: String(item.text || item.full_text || '').substring(0, 1000),
                     post_url: item.url,
                     status: 'new'
                 }));
             })());
         }
-        // 👔 LINKEDIN SCRAPER
+
+        // 👔 LINKEDIN SCRAPER (Using harvestapi/linkedin-post-search)
         if (platforms.has('linkedin')) {
             scrapeTasks.push((async () => {
                 const run = await apify.actor('harvestapi/linkedin-post-search').call({ keywords: keywords, maxResults: 10 });
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+
                 return items.filter(i => i.text).map(item => ({
                     workspace_id: workspace.id,
                     platform: 'linkedin',
                     intent_score: 'Medium',
-                    original_post_id: String(item.urn || item.url || Date.now()),
-                    author_handle: String(item.authorName || 'Unknown User'),
+                    original_post_id: String(item.urn || item.postUrl || item.url || Date.now()),
+                    author_handle: String(item.authorName || item.author?.name || 'Unknown User'),
                     post_content: String(item.text || '').substring(0, 1000),
-                    post_url: item.url,
+                    post_url: item.postUrl || item.url,
                     status: 'new'
                 }));
             })());
