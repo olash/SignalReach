@@ -185,14 +185,20 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
         if (platforms.has('reddit')) {
             scrapeTasks.push((async () => {
                 const run = await apify.actor('trudax/reddit-scraper-lite').call({
-                    searches: keywordArray.map(k => `"${k}"`), // Forces exact phrase match natively
+                    searches: keywordArray, // Removed quotes to bypass 403 WAF blocks
                     maxItems: 15,
                     maxPostCount: 15,
                     sort: "new",
                     time: "week" // Strictly limits extraction to the past 7 days
                 });
                 const { items } = await apify.dataset(run.defaultDatasetId).listItems();
-                return items.filter(i => (i.body || i.title) && isRecent(i.createdAt || i.created_at || i.parsedCreatedAt)).map(item => ({
+                const lowerCaseKeywords = keywordArray.map(k => k.toLowerCase());
+                return items.filter(i => {
+                    if (!(i.body || i.title)) return false;
+                    const text = String(i.body || i.title).toLowerCase();
+                    const hasExactKeyword = lowerCaseKeywords.some(kw => text.includes(kw));
+                    return hasExactKeyword && isRecent(i.createdAt || i.created_at || i.parsedCreatedAt);
+                }).map(item => ({
                     workspace_id: workspace.id,
                     platform: 'reddit',
                     intent_score: 'Medium',
@@ -232,8 +238,8 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
             const linkedInPromises = keywordArray.map(async (keyword) => {
                 try {
                     const run = await apify.actor('harvestapi/linkedin-post-search').call({
-                        keywords: `"${keyword}"`, // Forces LinkedIn native exact match
-                        maxResults: 10
+                        keywords: keyword, // Removed quotes so LinkedIn actually returns data
+                        maxResults: 15
                     });
                     const { items } = await apify.dataset(run.defaultDatasetId).listItems();
                     return items || [];
@@ -246,7 +252,13 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
                 const resultsArray = await Promise.all(linkedInPromises);
                 const allItems = resultsArray.flat(); // Combine all keyword results
 
-                return allItems.filter(i => i.text && isRecent(i.postedAt || i.date)).map(item => ({
+                const lowerCaseKeywords = keywordArray.map(k => k.toLowerCase());
+                return allItems.filter(i => {
+                    if (!i.text) return false;
+                    const text = i.text.toLowerCase();
+                    const hasExactKeyword = lowerCaseKeywords.some(kw => text.includes(kw));
+                    return hasExactKeyword && isRecent(i.postedAt || i.date);
+                }).map(item => ({
                     workspace_id: workspace.id,
                     platform: 'linkedin',
                     intent_score: 'Medium',
