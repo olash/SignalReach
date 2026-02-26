@@ -191,13 +191,14 @@ export default function WelcomePage() {
             if (profiles.length > 0) {
                 const { error: spErr } = await supabase
                     .from('social_profiles')
-                    .insert(
+                    .upsert(
                         profiles.map((p) => ({
                             user_id: user.id,
                             workspace_id: workspace.id,
                             platform: p.platform,
                             handle: p.handle.trim(),
-                        }))
+                        })),
+                        { onConflict: 'user_id, platform' }
                     );
                 if (spErr) throw spErr;
             }
@@ -340,15 +341,23 @@ export default function WelcomePage() {
                                     )}
                                 </div>
 
-                                <button
-                                    onClick={() => setStep(2)}
-                                    disabled={!step1Valid}
-                                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm"
-                                >
-                                    Continue
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:arrow-right-linear" class="ml-1.5 text-base align-middle" />
-                                </button>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => router.push('/dashboard')}
+                                        className="px-4 py-2.5 text-sm font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={() => setStep(2)}
+                                        disabled={!step1Valid}
+                                        className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm flex items-center justify-center gap-1.5"
+                                    >
+                                        Continue
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:arrow-right-linear" class="text-base align-middle" />
+                                    </button>
+                                </div>
                             </div>
                         )}
 

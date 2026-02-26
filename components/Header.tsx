@@ -13,6 +13,26 @@ export default function Header() {
     const { workspaces, activeWorkspace, setActiveWorkspace, loading } = useWorkspace();
     const { user } = useAuth();
 
+    const handleDeleteWorkspace = async (workspaceId: string) => {
+        const confirmDelete = window.confirm("Are you sure you want to delete this workspace? This cannot be undone.");
+        if (!confirmDelete) return;
+
+        const { error } = await supabase.from('workspaces').delete().eq('id', workspaceId);
+        if (error) {
+            toast.error("Failed to delete workspace.");
+            return;
+        }
+
+        toast.success("Workspace deleted.");
+        // If we deleted the active workspace, redirect to welcome or refresh
+        if (activeWorkspace?.id === workspaceId) {
+            window.location.href = '/dashboard';
+        } else {
+            // Let the WorkspaceContext naturally re-fetch/update or force reload
+            window.location.reload();
+        }
+    };
+
     const displayName = (user?.user_metadata?.full_name as string | undefined) || user?.email || 'My Account';
     const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
     const initials = displayName.charAt(0).toUpperCase();
@@ -76,20 +96,32 @@ export default function Header() {
                             <p className="px-3 py-2 text-xs text-gray-400">No workspaces found.</p>
                         )}
                         {workspaces.map((ws) => (
-                            <button
-                                key={ws.id}
-                                onClick={() => { setActiveWorkspace(ws); setWorkspaceOpen(false); }}
-                                className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-gray-50 ${ws.id === activeWorkspace?.id ? 'text-indigo-600' : 'text-[#111827]'}`}
-                            >
-                                <div className={`w-6 h-6 rounded flex items-center justify-center text-white text-[9px] font-bold shrink-0 ${ws.id === activeWorkspace?.id ? 'bg-indigo-600' : 'bg-gray-300'}`}>
-                                    {ws.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
-                                </div>
-                                <span className="font-medium truncate">{ws.name}</span>
-                                {ws.id === activeWorkspace?.id && (
-                                    /* @ts-expect-error custom element */
-                                    <iconify-icon icon="solar:check-read-linear" class="text-indigo-600 text-sm ml-auto shrink-0" />
-                                )}
-                            </button>
+                            <div key={ws.id} className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-gray-50 ${ws.id === activeWorkspace?.id ? 'text-indigo-600' : 'text-[#111827]'}`}>
+                                <button
+                                    onClick={() => { setActiveWorkspace(ws); setWorkspaceOpen(false); }}
+                                    className="flex-1 flex items-center gap-3 text-left min-w-0"
+                                >
+                                    <div className={`w-6 h-6 rounded flex items-center justify-center text-white text-[9px] font-bold shrink-0 ${ws.id === activeWorkspace?.id ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                                        {ws.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <span className="font-medium truncate block">{ws.name}</span>
+                                    {ws.id === activeWorkspace?.id && (
+                                        /* @ts-expect-error custom element */
+                                        <iconify-icon icon="solar:check-read-linear" class="text-indigo-600 text-sm ml-auto shrink-0" />
+                                    )}
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteWorkspace(ws.id);
+                                    }}
+                                    className="ml-2 px-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors shrink-0"
+                                    title="Delete Workspace"
+                                >
+                                    {/* @ts-expect-error custom element */}
+                                    <iconify-icon icon="solar:trash-bin-trash-linear" class="text-sm" />
+                                </button>
+                            </div>
                         ))}
                         <div className="border-t border-gray-100 mt-1 pt-1">
                             <button

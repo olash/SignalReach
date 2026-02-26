@@ -226,6 +226,17 @@ export default function DashboardPage() {
         setPanelOpen(true);
     };
 
+    const handleQuickDiscard = async (signalId: string) => {
+        setSignals((prev) => prev.map((s) => s.id === signalId ? { ...s, status: 'discarded' } : s));
+        const { error } = await supabase.from('signals').update({ status: 'discarded' }).eq('id', signalId);
+        if (error) {
+            toast.error('Failed to discard signal.');
+            fetchSignals();
+        } else {
+            toast.success('Signal discarded.');
+        }
+    };
+
     // ── Drag-and-drop handler ─────────────────────────────────────────────────
     const handleDragEnd = async (result: DropResult) => {
         const { source, destination, draggableId } = result;
@@ -399,14 +410,27 @@ export default function DashboardPage() {
 
                                                         <div className="flex items-center justify-between pt-1 border-t border-gray-50">
                                                             <span className="text-[10px] text-gray-400 font-medium capitalize">{lead.platform}</span>
-                                                            <button
-                                                                onClick={() => openPanel(lead)}
-                                                                className="flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 active:scale-95 px-2.5 py-1.5 rounded-lg transition-all duration-150"
-                                                            >
-                                                                {/* @ts-expect-error custom element */}
-                                                                <iconify-icon icon="solar:magic-stick-3-linear" class="text-sm" />
-                                                                Generate AI Draft
-                                                            </button>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <button
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        await handleQuickDiscard(lead.id);
+                                                                    }}
+                                                                    className="flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 active:scale-95 px-2 py-1.5 rounded-lg transition-all duration-150"
+                                                                    title="Discard Signal"
+                                                                >
+                                                                    {/* @ts-expect-error custom element */}
+                                                                    <iconify-icon icon="solar:trash-bin-trash-linear" class="text-sm" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => openPanel(lead)}
+                                                                    className="flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 active:scale-95 px-2.5 py-1.5 rounded-lg transition-all duration-150"
+                                                                >
+                                                                    {/* @ts-expect-error custom element */}
+                                                                    <iconify-icon icon="solar:magic-stick-3-linear" class="text-sm" />
+                                                                    Generate AI Draft
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )}

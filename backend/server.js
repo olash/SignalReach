@@ -336,11 +336,17 @@ CRITICAL: Return ONLY a single line of comma-separated phrases. No bullet points
  */
 app.post('/api/generate-draft', async (req, res) => {
     try {
-        const { post_content, tone, instructions } = req.body;
+        const { post_content, tone, instructions, platform } = req.body;
         if (!post_content) return res.status(400).json({ error: 'Post content required' });
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-        let prompt = `You are an expert sales development rep. A prospect posted this on social media:\n\n"${post_content}"\n\nWrite a short, highly personalized direct message to pitch a freelance design or UX service.`;
+        let prompt = `You are an expert sales development rep. A prospect posted this on social media:\n\n"${post_content}"\n\nWrite a short, highly personalized direct message.`;
+
+        if (platform?.toLowerCase() === 'twitter') {
+            prompt += '\nCRITICAL RULE: This is for Twitter. The total response MUST be strictly under 280 characters. Do not exceed this. Keep it punchy.';
+        } else if (platform?.toLowerCase() === 'linkedin') {
+            prompt += '\nCRITICAL RULE: This is for LinkedIn. Keep it under 400 characters. Professional but conversational.';
+        }
 
         if (tone) prompt += `\nUse a ${tone} tone.`;
         if (instructions) prompt += `\nAdditional instructions from the user: ${instructions}`;

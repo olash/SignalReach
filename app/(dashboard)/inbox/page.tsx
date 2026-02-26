@@ -15,6 +15,23 @@ interface Signal {
     post_content: string;
     post_url: string | null;
     status: string;
+    ai_draft?: string | null;
+}
+
+type Tone = 'Friendly' | 'Professional' | 'Challenger';
+
+const TONES: Tone[] = ['Friendly', 'Professional', 'Challenger'];
+
+const toneIcons: Record<Tone, string> = {
+    Friendly: 'solar:emoji-funny-square-linear',
+    Professional: 'solar:user-id-linear',
+    Challenger: 'solar:fire-linear',
+};
+
+interface DraftEntry {
+    text: string;
+    tone: string;
+    instructions: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -71,8 +88,14 @@ export default function InboxPage() {
     const [leads, setLeads] = useState<Signal[]>([]);
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<Signal | null>(null);
-    const [draftText, setDraftText] = useState('');
     const [sending, setSending] = useState(false);
+
+    // AI Draft State
+    const [drafts, setDrafts] = useState<DraftEntry[]>([]);
+    const [currentDraftIndex, setCurrentDraftIndex] = useState(0);
+    const [tone, setTone] = useState<string>('Friendly');
+    const [instructions, setInstructions] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
 
     const fetchLeads = useCallback(async () => {
         setLoading(true);
@@ -97,7 +120,7 @@ export default function InboxPage() {
 
         const { data, error } = await supabase
             .from('signals')
-            .select('id, platform, author_handle, post_content, post_url, status')
+            .select('id, platform, author_handle, post_content, post_url, status, ai_draft')
             .eq('workspace_id', workspaces[0].id)
             .in('status', ['action_required', 'new'])
             .order('id', { ascending: false });
@@ -112,21 +135,137 @@ export default function InboxPage() {
 
     useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-    // Auto-select first item
     useEffect(() => {
         if (!loading && leads.length > 0 && !selected) {
             setSelected(leads[0]);
-            setDraftText('');
         }
     }, [loading, leads, selected]);
 
+    // Sync drafts when a lead is selected
+    useEffect(() => {
+        if (!selected) {
+            setDrafts([]);
+            setCurrentDraftIndex(0);
+            setTone('Friendly');
+            setInstructions('');
+            return;
+        }
+
+        if (selected.ai_draft) {
+            try {
+                const parsed = JSON.parse(selected.ai_draft);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    setDrafts(parsed);
+                    setCurrentDraftIndex(parsed.length - 1);
+                    setTone(parsed[parsed.length - 1].tone || 'Friendly');
+                    setInstructions(parsed[parsed.length - 1].instructions || '');
+                } else {
+                    throw new Error("Invalid format");
+                }
+            } catch (e) {
+                setDrafts([{ text: selected.ai_draft, tone: 'Friendly', instructions: '' }]);
+                setCurrentDraftIndex(0);
+                setTone('Friendly');
+                setInstructions('');
+            }
+        } else {
+            setDrafts([]);
+            setCurrentDraftIndex(0);
+            setTone('Friendly');
+            setInstructions('');
+        }
+    }, [selected?.id, selected?.ai_draft]);
+
     const handleSelect = (lead: Signal) => {
         setSelected(lead);
-        setDraftText('');
+    };
+
+    const saveDraftToDatabase = async (draftHistory: DraftEntry[]) => {
+        if (!selected?.id) return;
+        try {
+            // Optimistically update local leads array so switching back remembers it
+            setLeads(prev => prev.map(l => l.id === selected.id ? { ...l, ai_draft: JSON.stringify(draftHistory) } : l));
+
+            const { error } = await supabase
+                .from('signals')
+                .update({ ai_draft: JSON.stringify(draftHistory) })
+                .eq('id', selected.id);
+            if (error) console.error("Error saving draft:", error);
+        } catch (err) {
+            console.error("Failed to save draft", err);
+        }
+    };
+
+    const handleGenerate = async () => {
+        if (!selected?.post_content) return;
+        setIsGenerating(true);
+        try {
+            const res = await fetch(
+                `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080'}/api/generate-draft`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        post_content: selected.post_content,
+                        tone,
+                        instructions,
+                        platform: selected.platform
+                    }),
+                }
+            );
+
+            if (!res.ok) throw new Error("Server error");
+            const data = await res.json();
+            if (data.draft) {
+                const newDrafts = [...drafts, { text: data.draft, tone, instructions }];
+                setDrafts(newDrafts);
+                setCurrentDraftIndex(newDrafts.length - 1);
+                await saveDraftToDatabase(newDrafts);
+                toast('✨ New draft generated!', { duration: 2000 });
+            }
+        } catch (err) {
+            console.error('[Inbox] handleGenerate error:', err);
+            toast.error('Failed to generate draft.');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const nextDraft = () => {
+        if (currentDraftIndex < drafts.length - 1) {
+            const nextIndex = currentDraftIndex + 1;
+            setCurrentDraftIndex(nextIndex);
+            setTone(drafts[nextIndex].tone || 'Friendly');
+            setInstructions(drafts[nextIndex].instructions || '');
+        }
+    };
+
+    const prevDraft = () => {
+        if (currentDraftIndex > 0) {
+            const prevIndex = currentDraftIndex - 1;
+            setCurrentDraftIndex(prevIndex);
+            setTone(drafts[prevIndex].tone || 'Friendly');
+            setInstructions(drafts[prevIndex].instructions || '');
+        }
+    };
+
+    const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const updatedDrafts = [...drafts];
+        if (updatedDrafts.length === 0) {
+            updatedDrafts.push({ text: e.target.value, tone, instructions });
+        } else {
+            updatedDrafts[currentDraftIndex] = {
+                ...updatedDrafts[currentDraftIndex],
+                text: e.target.value
+            };
+        }
+        setDrafts(updatedDrafts);
+        saveDraftToDatabase(updatedDrafts);
     };
 
     const handleSend = async () => {
-        if (!draftText.trim()) {
+        const currentDraft = drafts[currentDraftIndex]?.text || '';
+        if (!currentDraft.trim()) {
             toast.error('Write your reply first!');
             return;
         }
@@ -145,10 +284,20 @@ export default function InboxPage() {
             return;
         }
 
-        toast.success('Reply sent! Lead moved to Engaged. ✅');
+        try {
+            await navigator.clipboard.writeText(currentDraft);
+        } catch {
+            console.warn("clipboard write failed");
+        }
+
+        if (selected.post_url) {
+            window.open(selected.post_url, '_blank', 'noopener,noreferrer');
+        }
+
+        toast.success('Reply copied! Lead moved to Engaged. ✅');
         setLeads((prev) => prev.filter((l) => l.id !== selected.id));
         setSelected(null);
-        setDraftText('');
+
         setSending(false);
     };
 
@@ -259,47 +408,151 @@ export default function InboxPage() {
                                 <p className="text-sm text-gray-700 leading-relaxed">{selected.post_content}</p>
                             </div>
 
-                            {/* Draft editor */}
-                            <div className="flex-1 flex flex-col px-5 py-4 gap-3">
-                                <div className="flex items-center gap-2">
-                                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Your Reply Draft</p>
-                                    <span className="text-[10px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full font-medium border border-indigo-100">AI-assisted</span>
+                            {/* 3 ─ Draft Tone */}
+                            <div className="px-5 py-3 border-b border-gray-100">
+                                <label className="text-xs font-medium text-gray-500 block mb-2">
+                                    Draft Tone
+                                </label>
+                                <div className="flex gap-2 flex-wrap">
+                                    {TONES.map(t => (
+                                        <button
+                                            key={t}
+                                            onClick={() => setTone(t)}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ${tone === t
+                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                                : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+                                                }`}
+                                        >
+                                            {/* @ts-expect-error custom element */}
+                                            <iconify-icon icon={toneIcons[t]} class="text-sm"></iconify-icon>
+                                            {t}
+                                        </button>
+                                    ))}
                                 </div>
-                                <textarea
-                                    value={draftText}
-                                    onChange={(e) => setDraftText(e.target.value)}
-                                    placeholder={`Write or paste your reply to @${selected.author_handle} here…`}
-                                    className="flex-1 resize-none w-full text-sm text-gray-700 placeholder-gray-300 bg-gray-50 border border-gray-200 rounded-xl p-4 focus:outline-none focus:ring-2 focus:border-indigo-500 transition leading-relaxed min-h-[140px]"
+                            </div>
+
+                            {/* 4 ─ Custom Instructions */}
+                            <div className="px-5 py-3 border-b border-gray-100">
+                                <label className="text-xs font-medium text-gray-500 block mb-1.5">
+                                    Custom instructions{' '}
+                                    <span className="text-gray-400 font-normal">(optional)</span>
+                                </label>
+                                <input
+                                    placeholder="e.g., mention the free audit, keep it under 2 sentences…"
+                                    className="w-full px-3.5 py-2.5 text-sm text-gray-800 bg-[#F9FAFB] border border-gray-200 rounded-lg placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all duration-200"
+                                    type="text"
+                                    value={instructions}
+                                    onChange={(e) => setInstructions(e.target.value)}
                                 />
                             </div>
 
+                            {/* 5 ─ Draft Editor */}
+                            <div className="flex-1 flex flex-col px-5 py-4 gap-3 bg-white">
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">AI Draft</p>
+                                        <span className="text-[10px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full font-medium border border-indigo-100">AI-assisted</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {drafts.length > 1 && (
+                                            <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+                                                <button
+                                                    onClick={prevDraft}
+                                                    disabled={currentDraftIndex === 0}
+                                                    className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
+                                                >
+                                                    {/* @ts-expect-error custom element */}
+                                                    <iconify-icon icon="solar:alt-arrow-left-line-duotone" />
+                                                </button>
+                                                <span>{currentDraftIndex + 1} of {drafts.length}</span>
+                                                <button
+                                                    onClick={nextDraft}
+                                                    disabled={currentDraftIndex === drafts.length - 1}
+                                                    className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
+                                                >
+                                                    {/* @ts-expect-error custom element */}
+                                                    <iconify-icon icon="solar:alt-arrow-right-line-duotone" />
+                                                </button>
+                                            </div>
+                                        )}
+                                        {isGenerating && (
+                                            <span className="text-[10px] text-indigo-500 flex items-center gap-1 animate-pulse">
+                                                {/* @ts-expect-error custom element */}
+                                                <iconify-icon icon="solar:refresh-linear" class="text-xs animate-spin" />
+                                                Generating…
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <textarea
+                                    rows={6}
+                                    className="flex-1 resize-none w-full text-sm text-gray-700 placeholder-gray-300 bg-[#F9FAFB] border border-gray-200 rounded-xl p-4 focus:outline-none focus:ring-2 focus:border-indigo-500 transition leading-relaxed min-h-[140px]"
+                                    value={drafts[currentDraftIndex]?.text || ''}
+                                    onChange={handleDraftChange}
+                                    placeholder={isGenerating ? "" : `Write or paste your reply to @${selected.author_handle} here…`}
+                                    disabled={drafts.length === 0 && !isGenerating}
+                                />
+
+                                {/* Char counter logic replicated */}
+                                <div className="flex justify-end mt-1">
+                                    <span className={`text-xs font-medium tabular-nums flex items-center gap-1 ${(null !== (selected.platform === 'twitter' ? 280 : 500)) && (drafts[currentDraftIndex]?.text || '').length > (selected.platform === 'twitter' ? 280 : 500) ? 'text-red-500' : 'text-gray-500'}`}>
+                                        {(drafts[currentDraftIndex]?.text || '').length} / {selected.platform === 'twitter' ? 280 : 500}
+                                    </span>
+                                </div>
+                            </div>
+
                             {/* Action bar */}
-                            <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+                            <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3 bg-white shrink-0">
                                 <button
-                                    onClick={() => { setSelected(null); setDraftText(''); }}
+                                    onClick={() => { setSelected(null); setDrafts([]); }}
                                     className="text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors"
                                 >
                                     Dismiss
                                 </button>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => toast('Opening AI draft generator…', { icon: '✨' })}
-                                        className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 active:scale-95 px-3 py-2 rounded-lg transition-all duration-150"
-                                    >
-                                        {/* @ts-expect-error custom element */}
-                                        <iconify-icon icon="solar:magic-stick-3-linear" class="text-sm" />
-                                        Generate Draft
-                                    </button>
-                                    <button
-                                        onClick={handleSend}
-                                        disabled={sending}
-                                        className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 rounded-lg shadow-sm transition-all duration-150"
-                                    >
-                                        {/* @ts-expect-error custom element */}
-                                        <iconify-icon icon={sending ? 'solar:refresh-linear' : 'solar:arrow-right-up-linear'} class={`text-sm ${sending ? 'animate-spin' : ''}`} />
-                                        {sending ? 'Sending…' : 'Send Reply'}
-                                    </button>
-                                </div>
+
+                                {(() => {
+                                    switch (selected.status) {
+                                        case 'new':
+                                        case 'action_required':
+                                            return (
+                                                <div className="flex w-full sm:w-auto items-center gap-2 justify-end">
+                                                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 hide-scrollbar cursor-pointer">
+                                                        <button
+                                                            onClick={handleGenerate}
+                                                            disabled={isGenerating}
+                                                            className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 shrink-0"
+                                                        >
+                                                            {/* @ts-expect-error custom element */}
+                                                            <iconify-icon icon="solar:refresh-linear" class={`text-sm ${isGenerating ? 'animate-spin' : ''}`} />
+                                                            {drafts.length > 0 ? 'Regenerate Draft' : 'Generate Draft'}
+                                                        </button>
+                                                    </div>
+                                                    <button
+                                                        onClick={handleSend}
+                                                        disabled={sending || drafts.length === 0 || ((drafts[currentDraftIndex]?.text || '').length > (selected.platform === 'twitter' ? 280 : 500))}
+                                                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shrink-0 transition-all duration-150 shadow-sm"
+                                                    >
+                                                        {/* @ts-expect-error custom element */}
+                                                        <iconify-icon icon={sending ? 'solar:refresh-linear' : 'solar:copy-linear'} class={`text-sm ${sending ? 'animate-spin' : ''}`} />
+                                                        {sending ? 'Sending…' : 'Copy & Mark Engaged'}
+                                                    </button>
+                                                </div>
+                                            );
+                                        case 'engaged':
+                                        default:
+                                            return (
+                                                <button
+                                                    disabled
+                                                    className="flex items-center gap-2 bg-emerald-50 text-emerald-600 text-xs font-semibold px-4 py-2.5 rounded-lg shrink-0"
+                                                >
+                                                    {/* @ts-expect-error custom element */}
+                                                    <iconify-icon icon="solar:check-circle-linear" class="text-sm" />
+                                                    Sent
+                                                </button>
+                                            );
+                                    }
+                                })()}
                             </div>
                         </>
                     )}
