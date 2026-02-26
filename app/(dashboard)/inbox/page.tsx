@@ -151,11 +151,16 @@ export default function InboxPage() {
             return;
         }
 
-        if (selected.ai_draft && Array.isArray(selected.ai_draft) && selected.ai_draft.length > 0) {
-            setDrafts(selected.ai_draft);
-            setCurrentDraftIndex(selected.ai_draft.length - 1);
-            setTone(selected.ai_draft[selected.ai_draft.length - 1].tone || 'Friendly');
-            setInstructions(selected.ai_draft[selected.ai_draft.length - 1].instructions || '');
+        let parsedDrafts: any = selected?.ai_draft;
+        if (typeof parsedDrafts === 'string') {
+            try { parsedDrafts = JSON.parse(parsedDrafts); } catch (e) { parsedDrafts = []; }
+        }
+
+        if (parsedDrafts && Array.isArray(parsedDrafts) && parsedDrafts.length > 0) {
+            setDrafts(parsedDrafts);
+            setCurrentDraftIndex(parsedDrafts.length - 1);
+            setTone(parsedDrafts[parsedDrafts.length - 1].tone || 'Friendly');
+            setInstructions(parsedDrafts[parsedDrafts.length - 1].instructions || '');
         } else {
             setDrafts([]);
             setCurrentDraftIndex(0);
@@ -172,11 +177,11 @@ export default function InboxPage() {
         if (!selected?.id) return;
         try {
             // Optimistically update local leads array so switching back remembers it
-            setLeads(prev => prev.map(l => l.id === selected.id ? { ...l, ai_draft: JSON.stringify(draftHistory) } : l));
+            setLeads(prev => prev.map(l => l.id === selected.id ? { ...l, ai_draft: draftHistory } : l));
 
             const { error } = await supabase
                 .from('signals')
-                .update({ ai_draft: JSON.stringify(draftHistory) })
+                .update({ ai_draft: draftHistory })
                 .eq('id', selected.id);
             if (error) console.error("Error saving draft:", error);
         } catch (err) {

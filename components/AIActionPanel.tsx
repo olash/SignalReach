@@ -103,11 +103,16 @@ export default function AIActionPanel({
 
     // Reset state when a new signal is selected
     useEffect(() => {
-        if (prospect?.ai_draft && Array.isArray(prospect.ai_draft) && prospect.ai_draft.length > 0) {
-            setDrafts(prospect.ai_draft);
-            setCurrentDraftIndex(prospect.ai_draft.length - 1);
-            setTone(prospect.ai_draft[prospect.ai_draft.length - 1].tone || 'Friendly');
-            setInstructions(prospect.ai_draft[prospect.ai_draft.length - 1].instructions || '');
+        let parsedDrafts: any = prospect?.ai_draft;
+        if (typeof parsedDrafts === 'string') {
+            try { parsedDrafts = JSON.parse(parsedDrafts); } catch (e) { parsedDrafts = []; }
+        }
+
+        if (parsedDrafts && Array.isArray(parsedDrafts) && parsedDrafts.length > 0) {
+            setDrafts(parsedDrafts);
+            setCurrentDraftIndex(parsedDrafts.length - 1);
+            setTone(parsedDrafts[parsedDrafts.length - 1].tone || 'Friendly');
+            setInstructions(parsedDrafts[parsedDrafts.length - 1].instructions || '');
         } else {
             setDrafts([]);
             setCurrentDraftIndex(0);
@@ -131,7 +136,7 @@ export default function AIActionPanel({
         try {
             const { error } = await supabase
                 .from('signals')
-                .update({ ai_draft: JSON.stringify(draftHistory) })
+                .update({ ai_draft: draftHistory })
                 .eq('id', prospect.id);
             if (error) console.error("Error saving draft:", error);
         } catch (err) {
