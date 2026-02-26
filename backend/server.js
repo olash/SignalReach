@@ -305,9 +305,19 @@ app.post('/api/generate-keywords', async (req, res) => {
         const { niche } = req.body;
         if (!niche) return res.status(400).json({ error: 'Niche is required' });
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-        const prompt = `You are an expert lead generation specialist. The user is looking for clients on Twitter, Reddit, and LinkedIn. Their niche/goal is: "${niche}". 
-        Generate exactly 4 short, high-intent search phrases to find buyers. Focus on pain points or direct hiring intent (e.g., "need a UX audit", "users are dropping off", "hiring a designer"). 
-        CRITICAL: Return ONLY a comma-separated list. No bullet points, no quotes, no extra text.`;
+        const prompt = `You are an expert lead generation specialist building exact-match search queries for a social media scraper (Reddit, Twitter, LinkedIn). 
+The user's niche or job title is: "${niche}".
+Generate exactly 4 short, highly specific, high-intent search phrases that a founder or client would naturally type when looking to hire for this exact niche, or when expressing a problem this niche solves.
+
+STRICT RULES:
+
+Keep phrases under 6 words.
+
+Use natural, everyday human language (e.g., "hiring a product designer", "need a UI revamp", "looking for freelance UX").
+
+DO NOT invent acronyms. Stick strictly to widely known industry terms based on the user's input.
+
+CRITICAL: Return ONLY a single line of comma-separated phrases. No bullet points, no quotation marks, no conversational text.`;
 
         const result = await model.generateContent(prompt);
         const keywords = result.response.text().trim();
