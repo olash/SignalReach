@@ -345,9 +345,11 @@ app.post('/api/generate-draft', async (req, res) => {
         if (instructions) prompt += `\nAdditional instructions from the user: ${instructions}`;
 
         if (platform?.toLowerCase() === 'twitter') {
-            prompt += `\n\nCRITICAL RULE: This is for Twitter. You MUST keep the entire response under 2 sentences. Make it extremely brief, punchy, and under 250 characters. Do not include quotes or intro text.`;
+            prompt += `\n\nCRITICAL RULE: This is for Twitter. You MUST keep the entire response under 40 words total. Do not exceed 40 words. Make it punchy, no hashtags, no quotes.`;
+        } else if (platform?.toLowerCase() === 'linkedin') {
+            prompt += `\n\nCRITICAL RULE: This is for LinkedIn. Keep it under 60 words total. No quotes.`;
         } else {
-            prompt += `\n\nCRITICAL RULE: Keep it natural, under 3 sentences, and do NOT include quotes or intro text. Return ONLY the exact message text.`;
+            prompt += `\n\nCRITICAL RULE: Keep it natural, under 3 sentences. No quotes.`;
         }
 
         const result = await model.generateContent(prompt);

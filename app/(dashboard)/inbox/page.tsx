@@ -518,6 +518,33 @@ export default function InboxPage() {
                                                             <iconify-icon icon="solar:refresh-linear" class={`text-sm ${isGenerating ? 'animate-spin' : ''}`} />
                                                             {drafts.length > 0 ? 'Regenerate Draft' : 'Generate Draft'}
                                                         </button>
+                                                        {/* INJECTED PAGINATION UI */}
+                                                        {drafts.length > 1 && (
+                                                            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden divide-x divide-gray-200 shrink-0">
+                                                                <button
+                                                                    onClick={prevDraft}
+                                                                    disabled={currentDraftIndex === 0}
+                                                                    aria-label="Previous draft"
+                                                                    className={`px-2 py-2 transition-colors ${currentDraftIndex === 0 ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'}`}
+                                                                >
+                                                                    {/* @ts-expect-error custom element */}
+                                                                    <iconify-icon icon="solar:alt-arrow-left-linear" class="text-xs"></iconify-icon>
+                                                                </button>
+                                                                <span className="text-[10px] text-gray-500 font-medium px-2 py-2 tabular-nums whitespace-nowrap select-none bg-white">
+                                                                    {currentDraftIndex + 1} of {drafts.length}
+                                                                </span>
+                                                                <button
+                                                                    onClick={nextDraft}
+                                                                    disabled={currentDraftIndex === drafts.length - 1}
+                                                                    aria-label="Next draft"
+                                                                    className={`px-2 py-2 transition-colors ${currentDraftIndex === drafts.length - 1 ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'}`}
+                                                                >
+                                                                    {/* @ts-expect-error custom element */}
+                                                                    <iconify-icon icon="solar:alt-arrow-right-linear" class="text-xs"></iconify-icon>
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        {/* END PAGINATION UI */}
                                                     </div>
                                                     <button
                                                         onClick={handleSend}
@@ -533,14 +560,43 @@ export default function InboxPage() {
                                         case 'engaged':
                                         default:
                                             return (
-                                                <button
-                                                    disabled
-                                                    className="flex items-center gap-2 bg-emerald-50 text-emerald-600 text-xs font-semibold px-4 py-2.5 rounded-lg shrink-0"
-                                                >
-                                                    {/* @ts-expect-error custom element */}
-                                                    <iconify-icon icon="solar:check-circle-linear" class="text-sm" />
-                                                    Sent
-                                                </button>
+                                                <div className="flex items-center gap-2 justify-end w-full">
+                                                    {/* INJECTED PAGINATION UI */}
+                                                    {drafts.length > 1 && (
+                                                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden divide-x divide-gray-200 shrink-0">
+                                                            <button
+                                                                onClick={prevDraft}
+                                                                disabled={currentDraftIndex === 0}
+                                                                aria-label="Previous draft"
+                                                                className={`px-2 py-2 transition-colors ${currentDraftIndex === 0 ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'}`}
+                                                            >
+                                                                {/* @ts-expect-error custom element */}
+                                                                <iconify-icon icon="solar:alt-arrow-left-linear" class="text-xs"></iconify-icon>
+                                                            </button>
+                                                            <span className="text-[10px] text-gray-500 font-medium px-2 py-2 tabular-nums whitespace-nowrap select-none bg-white">
+                                                                {currentDraftIndex + 1} of {drafts.length}
+                                                            </span>
+                                                            <button
+                                                                onClick={nextDraft}
+                                                                disabled={currentDraftIndex === drafts.length - 1}
+                                                                aria-label="Next draft"
+                                                                className={`px-2 py-2 transition-colors ${currentDraftIndex === drafts.length - 1 ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'}`}
+                                                            >
+                                                                {/* @ts-expect-error custom element */}
+                                                                <iconify-icon icon="solar:alt-arrow-right-linear" class="text-xs"></iconify-icon>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    {/* END PAGINATION UI */}
+                                                    <button
+                                                        disabled
+                                                        className="flex items-center gap-2 bg-emerald-50 text-emerald-600 text-xs font-semibold px-4 py-2.5 rounded-lg shrink-0"
+                                                    >
+                                                        {/* @ts-expect-error custom element */}
+                                                        <iconify-icon icon="solar:check-circle-linear" class="text-sm" />
+                                                        Sent
+                                                    </button>
+                                                </div>
                                             );
                                     }
                                 })()}
