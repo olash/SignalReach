@@ -340,18 +340,16 @@ app.post('/api/generate-draft', async (req, res) => {
         if (!post_content) return res.status(400).json({ error: 'Post content required' });
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-        let prompt = `You are an expert sales development rep. A prospect posted this on social media:\n\n"${post_content}"\n\nWrite a short, highly personalized direct message.`;
-
-        if (platform?.toLowerCase() === 'twitter') {
-            prompt += '\nCRITICAL RULE: This is for Twitter. The total response MUST be strictly under 280 characters. Do not exceed this. Keep it punchy.';
-        } else if (platform?.toLowerCase() === 'linkedin') {
-            prompt += '\nCRITICAL RULE: This is for LinkedIn. Keep it under 400 characters. Professional but conversational.';
-        }
-
+        let prompt = `You are an expert sales development rep. A prospect posted this on social media:\n\n"${post_content}"\n\nWrite a highly personalized direct message to pitch a freelance design or UX service.`;
         if (tone) prompt += `\nUse a ${tone} tone.`;
         if (instructions) prompt += `\nAdditional instructions from the user: ${instructions}`;
 
-        prompt += `\n\nReturn ONLY the exact message text to send. Keep it natural, under 3 sentences, and do NOT include quotes or intro text.`;
+        if (platform?.toLowerCase() === 'twitter') {
+            prompt += `\n\nCRITICAL RULE: This is for Twitter. You MUST keep the entire response under 2 sentences. Make it extremely brief, punchy, and under 250 characters. Do not include quotes or intro text.`;
+        } else {
+            prompt += `\n\nCRITICAL RULE: Keep it natural, under 3 sentences, and do NOT include quotes or intro text. Return ONLY the exact message text.`;
+        }
+
         const result = await model.generateContent(prompt);
         res.json({ draft: result.response.text().trim() });
     } catch (error) {

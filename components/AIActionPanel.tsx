@@ -76,7 +76,7 @@ const toneIcons: Record<Tone, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-interface DraftEntry {
+interface DraftHistory {
     text: string;
     tone: string;
     instructions: string;
@@ -87,7 +87,7 @@ export default function AIActionPanel({
     onClose,
     prospect,
 }: AIActionPanelProps) {
-    const [drafts, setDrafts] = useState<DraftEntry[]>([]);
+    const [drafts, setDrafts] = useState<DraftHistory[]>([]);
     const [currentDraftIndex, setCurrentDraftIndex] = useState(0);
     const [tone, setTone] = useState<string>('Friendly');
     const [instructions, setInstructions] = useState('');
@@ -103,24 +103,11 @@ export default function AIActionPanel({
 
     // Reset state when a new signal is selected
     useEffect(() => {
-        if (prospect?.ai_draft) {
-            try {
-                const parsed = JSON.parse(prospect.ai_draft);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    setDrafts(parsed);
-                    setCurrentDraftIndex(parsed.length - 1);
-                    setTone(parsed[parsed.length - 1].tone || 'Friendly');
-                    setInstructions(parsed[parsed.length - 1].instructions || '');
-                } else {
-                    throw new Error("Invalid draft format");
-                }
-            } catch (e) {
-                // Fallback for flat string
-                setDrafts([{ text: prospect.ai_draft, tone: 'Friendly', instructions: '' }]);
-                setCurrentDraftIndex(0);
-                setTone('Friendly');
-                setInstructions('');
-            }
+        if (prospect?.ai_draft && Array.isArray(prospect.ai_draft) && prospect.ai_draft.length > 0) {
+            setDrafts(prospect.ai_draft);
+            setCurrentDraftIndex(prospect.ai_draft.length - 1);
+            setTone(prospect.ai_draft[prospect.ai_draft.length - 1].tone || 'Friendly');
+            setInstructions(prospect.ai_draft[prospect.ai_draft.length - 1].instructions || '');
         } else {
             setDrafts([]);
             setCurrentDraftIndex(0);
@@ -139,7 +126,7 @@ export default function AIActionPanel({
 
     // ── Handlers ────────────────────────────────────────────────────────────────
 
-    const saveDraftToDatabase = async (draftHistory: DraftEntry[]) => {
+    const saveDraftToDatabase = async (draftHistory: DraftHistory[]) => {
         if (!prospect?.id) return;
         try {
             const { error } = await supabase
@@ -176,10 +163,15 @@ export default function AIActionPanel({
 
             const data = await res.json();
             if (data.draft) {
-                const newDrafts = [...drafts, { text: data.draft, tone, instructions }];
+                const newDraftObj: DraftHistory = {
+                    text: data.draft,
+                    tone: tone,
+                    instructions: instructions
+                };
+                const newDrafts = [...drafts, newDraftObj];
                 setDrafts(newDrafts);
                 setCurrentDraftIndex(newDrafts.length - 1); // Jump to newest draft
-                await saveDraftToDatabase(newDrafts);
+                await saveDraftToDatabase(newDrafts); // Save the whole array to Supabase jsonb
                 toast('✨ New draft generated!', { duration: 2000 });
             }
         } catch (err) {
@@ -192,32 +184,25 @@ export default function AIActionPanel({
 
     const nextDraft = () => {
         if (currentDraftIndex < drafts.length - 1) {
-            const nextIndex = currentDraftIndex + 1;
-            setCurrentDraftIndex(nextIndex);
-            setTone(drafts[nextIndex].tone || 'Friendly');
-            setInstructions(drafts[nextIndex].instructions || '');
+            const newIdx = currentDraftIndex + 1;
+            setCurrentDraftIndex(newIdx);
+            setTone(drafts[newIdx].tone);
+            setInstructions(drafts[newIdx].instructions);
         }
     };
 
     const prevDraft = () => {
         if (currentDraftIndex > 0) {
-            const prevIndex = currentDraftIndex - 1;
-            setCurrentDraftIndex(prevIndex);
-            setTone(drafts[prevIndex].tone || 'Friendly');
-            setInstructions(drafts[prevIndex].instructions || '');
+            const newIdx = currentDraftIndex - 1;
+            setCurrentDraftIndex(newIdx);
+            setTone(drafts[newIdx].tone);
+            setInstructions(drafts[newIdx].instructions);
         }
     };
 
     const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const updatedDrafts = [...drafts];
-        if (updatedDrafts.length === 0) {
-            updatedDrafts.push({ text: e.target.value, tone, instructions });
-        } else {
-            updatedDrafts[currentDraftIndex] = {
-                ...updatedDrafts[currentDraftIndex],
-                text: e.target.value
-            };
-        }
+        updatedDrafts[currentDraftIndex].text = e.target.value;
         setDrafts(updatedDrafts);
         saveDraftToDatabase(updatedDrafts);
     };
@@ -425,7 +410,7 @@ export default function AIActionPanel({
                         <textarea
                             rows={6}
                             className="w-full px-3.5 py-3 h-40 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none transition-all duration-200 leading-relaxed text-gray-800 bg-white"
-                            value={currentDraft}
+                            value={drafts[currentDraftIndex]?.text || ""}
                             onChange={handleDraftChange}
                             placeholder={isGenerating ? "" : `Write or paste your reply to @${prospect?.handle} here…`}
                             disabled={drafts.length === 0 && !isGenerating}

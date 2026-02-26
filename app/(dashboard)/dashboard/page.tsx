@@ -22,7 +22,7 @@ interface Signal {
     status: SignalStatus;
     intent_score: string;
     created_at: string;
-    ai_draft?: string | null;
+    ai_draft?: any;
 }
 
 interface PanelProspect {
@@ -32,7 +32,7 @@ interface PanelProspect {
     originalPost: string;
     postUrl: string | null;
     status: SignalStatus;
-    ai_draft?: string | null;
+    ai_draft?: any;
 }
 
 // ─── Column configuration ────────────────────────────────────────────────────

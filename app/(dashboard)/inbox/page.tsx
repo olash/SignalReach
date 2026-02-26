@@ -15,7 +15,7 @@ interface Signal {
     post_content: string;
     post_url: string | null;
     status: string;
-    ai_draft?: string | null;
+    ai_draft?: any;
 }
 
 type Tone = 'Friendly' | 'Professional' | 'Challenger';
@@ -28,7 +28,7 @@ const toneIcons: Record<Tone, string> = {
     Challenger: 'solar:fire-linear',
 };
 
-interface DraftEntry {
+interface DraftHistory {
     text: string;
     tone: string;
     instructions: string;
@@ -91,7 +91,7 @@ export default function InboxPage() {
     const [sending, setSending] = useState(false);
 
     // AI Draft State
-    const [drafts, setDrafts] = useState<DraftEntry[]>([]);
+    const [drafts, setDrafts] = useState<DraftHistory[]>([]);
     const [currentDraftIndex, setCurrentDraftIndex] = useState(0);
     const [tone, setTone] = useState<string>('Friendly');
     const [instructions, setInstructions] = useState('');
@@ -151,23 +151,11 @@ export default function InboxPage() {
             return;
         }
 
-        if (selected.ai_draft) {
-            try {
-                const parsed = JSON.parse(selected.ai_draft);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    setDrafts(parsed);
-                    setCurrentDraftIndex(parsed.length - 1);
-                    setTone(parsed[parsed.length - 1].tone || 'Friendly');
-                    setInstructions(parsed[parsed.length - 1].instructions || '');
-                } else {
-                    throw new Error("Invalid format");
-                }
-            } catch (e) {
-                setDrafts([{ text: selected.ai_draft, tone: 'Friendly', instructions: '' }]);
-                setCurrentDraftIndex(0);
-                setTone('Friendly');
-                setInstructions('');
-            }
+        if (selected.ai_draft && Array.isArray(selected.ai_draft) && selected.ai_draft.length > 0) {
+            setDrafts(selected.ai_draft);
+            setCurrentDraftIndex(selected.ai_draft.length - 1);
+            setTone(selected.ai_draft[selected.ai_draft.length - 1].tone || 'Friendly');
+            setInstructions(selected.ai_draft[selected.ai_draft.length - 1].instructions || '');
         } else {
             setDrafts([]);
             setCurrentDraftIndex(0);
@@ -180,7 +168,7 @@ export default function InboxPage() {
         setSelected(lead);
     };
 
-    const saveDraftToDatabase = async (draftHistory: DraftEntry[]) => {
+    const saveDraftToDatabase = async (draftHistory: DraftHistory[]) => {
         if (!selected?.id) return;
         try {
             // Optimistically update local leads array so switching back remembers it
@@ -217,7 +205,12 @@ export default function InboxPage() {
             if (!res.ok) throw new Error("Server error");
             const data = await res.json();
             if (data.draft) {
-                const newDrafts = [...drafts, { text: data.draft, tone, instructions }];
+                const newDraftObj: DraftHistory = {
+                    text: data.draft,
+                    tone: tone,
+                    instructions: instructions
+                };
+                const newDrafts = [...drafts, newDraftObj];
                 setDrafts(newDrafts);
                 setCurrentDraftIndex(newDrafts.length - 1);
                 await saveDraftToDatabase(newDrafts);
@@ -233,32 +226,25 @@ export default function InboxPage() {
 
     const nextDraft = () => {
         if (currentDraftIndex < drafts.length - 1) {
-            const nextIndex = currentDraftIndex + 1;
-            setCurrentDraftIndex(nextIndex);
-            setTone(drafts[nextIndex].tone || 'Friendly');
-            setInstructions(drafts[nextIndex].instructions || '');
+            const newIdx = currentDraftIndex + 1;
+            setCurrentDraftIndex(newIdx);
+            setTone(drafts[newIdx].tone);
+            setInstructions(drafts[newIdx].instructions);
         }
     };
 
     const prevDraft = () => {
         if (currentDraftIndex > 0) {
-            const prevIndex = currentDraftIndex - 1;
-            setCurrentDraftIndex(prevIndex);
-            setTone(drafts[prevIndex].tone || 'Friendly');
-            setInstructions(drafts[prevIndex].instructions || '');
+            const newIdx = currentDraftIndex - 1;
+            setCurrentDraftIndex(newIdx);
+            setTone(drafts[newIdx].tone);
+            setInstructions(drafts[newIdx].instructions);
         }
     };
 
     const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const updatedDrafts = [...drafts];
-        if (updatedDrafts.length === 0) {
-            updatedDrafts.push({ text: e.target.value, tone, instructions });
-        } else {
-            updatedDrafts[currentDraftIndex] = {
-                ...updatedDrafts[currentDraftIndex],
-                text: e.target.value
-            };
-        }
+        updatedDrafts[currentDraftIndex].text = e.target.value;
         setDrafts(updatedDrafts);
         saveDraftToDatabase(updatedDrafts);
     };
