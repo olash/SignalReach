@@ -4,24 +4,23 @@ import Link from 'next/link';
 export default function PricingPage() {
     return (
         <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-indigo-100 selection:text-indigo-900 pt-10">
-            {/* Minimal Header for Pricing */}
-            <header className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-                <nav className="max-w-7xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-sm">
-                            {/* @ts-expect-error custom element */}
-                            <iconify-icon icon="solar:radar-linear" class="text-xl"></iconify-icon>
-                        </div>
-                        <span className="text-xl font-bold tracking-tight text-gray-900">SignalReach</span>
-                    </Link>
-                    <div className="flex items-center gap-4">
-                        <Link href="/welcome" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Sign In</Link>
-                        <Link href="/welcome" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-all shadow-sm active:scale-95">
-                            Get Started Free
-                        </Link>
+            {/* Navigation */}
+            <nav className="sticky top-0 z-50 w-full backdrop-blur-md bg-[#F9FAFB]/80 border-b border-gray-200/80">
+                <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Link href="/" className="font-semibold tracking-tighter text-xl text-[#111827]">SIGNALREACH</Link>
                     </div>
-                </nav>
-            </header>
+                    <div className="hidden md:flex items-center gap-8 text-sm text-gray-500">
+                        <Link href="/" className="hover:text-[#111827] transition-colors">Product</Link>
+                        <Link href="/" className="hover:text-[#111827] transition-colors">Customers</Link>
+                        <Link href="/pricing" className="hover:text-[#111827] transition-colors">Pricing</Link>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <Link href="/welcome" className="text-sm text-gray-500 hover:text-[#111827] transition-colors hidden md:block">Log in</Link>
+                        <Link href="/welcome" className="text-sm font-medium bg-[#4F46E5] text-white px-4 py-2 rounded-lg hover:bg-[#4338CA] hover:-translate-y-0.5 shadow-sm hover:shadow-md transition-all">Get Started</Link>
+                    </div>
+                </div>
+            </nav>
 
             <main className="py-20 max-w-7xl mx-auto px-5 lg:px-8 mt-12">
                 <div className="text-center mb-16">

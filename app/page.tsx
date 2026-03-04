@@ -1,107 +1,396 @@
-'use client';
-import { useState } from 'react';
 import Link from 'next/link';
+import Script from 'next/script';
 
 export default function LandingPage() {
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
     return (
-        <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-indigo-100 selection:text-indigo-900">
+        <div className="bg-[#F9FAFB] text-[#111827] antialiased selection:bg-indigo-100 selection:text-indigo-900 flex flex-col min-h-screen">
+            <Script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js" strategy="lazyOnload" />
+
             {/* Navigation */}
-            <header className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-                <nav className="max-w-7xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
+            <nav className="sticky top-0 z-50 w-full backdrop-blur-md bg-[#F9FAFB]/80 border-b border-gray-200/80">
+                <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-sm">
-                            {/* @ts-expect-error custom element */}
-                            <iconify-icon icon="solar:radar-linear" class="text-xl"></iconify-icon>
-                        </div>
-                        <span className="text-xl font-bold tracking-tight text-gray-900">SignalReach</span>
+                        <span className="font-semibold tracking-tighter text-xl text-[#111827]">SIGNALREACH</span>
                     </div>
-                    {/* Desktop Menu */}
-                    <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
-                        <a href="#features" className="hover:text-gray-900 transition-colors">How it Works</a>
-                        <Link href="/pricing" className="hover:text-gray-900 transition-colors">Pricing</Link>
-                        <div className="flex items-center gap-4 border-l border-gray-200 pl-8">
-                            <Link href="/welcome" className="hover:text-gray-900 transition-colors">Sign In</Link>
-                            <Link href="/welcome" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-all shadow-sm active:scale-95">
-                                Get Started Free
-                            </Link>
-                        </div>
+                    <div className="hidden md:flex items-center gap-8 text-sm text-gray-500">
+                        <a href="#" className="hover:text-[#111827] transition-colors">Product</a>
+                        <a href="#" className="hover:text-[#111827] transition-colors">Customers</a>
+                        <Link href="/pricing" className="hover:text-[#111827] transition-colors">Pricing</Link>
                     </div>
-                    {/* Mobile Menu Toggle */}
-                    <button
-                        className="md:hidden p-2 text-gray-600 hover:bg-gray-50 rounded-lg"
-                        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    >
-                        {/* @ts-expect-error custom element */}
-                        <iconify-icon icon={isMobileMenuOpen ? "solar:close-circle-linear" : "solar:hamburger-menu-linear"} class="text-2xl"></iconify-icon>
-                    </button>
-                </nav>
-                {/* Mobile Menu Dropdown */}
-                {isMobileMenuOpen && (
-                    <div className="md:hidden absolute top-16 inset-x-0 bg-white border-b border-gray-100 shadow-lg py-4 px-5 flex flex-col gap-4 z-50">
-                        <a href="#features" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-600 font-medium">How it Works</a>
-                        <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-600 font-medium">Pricing</Link>
-                        <div className="h-px bg-gray-100 my-2"></div>
-                        <Link href="/welcome" className="text-gray-600 font-medium text-center py-2">Sign In</Link>
-                        <Link href="/welcome" className="bg-indigo-600 text-white font-medium text-center py-2.5 rounded-lg shadow-sm">Get Started Free</Link>
+                    <div className="flex items-center gap-4">
+                        <Link href="/welcome" className="text-sm text-gray-500 hover:text-[#111827] transition-colors hidden md:block">Log in</Link>
+                        <Link href="/welcome" className="text-sm font-medium bg-[#4F46E5] text-white px-4 py-2 rounded-lg hover:bg-[#4338CA] hover:-translate-y-0.5 shadow-sm hover:shadow-md transition-all">Get Started</Link>
                     </div>
-                )}
-            </header>
-            <main>
+                </div>
+            </nav>
+
+            <main className="flex-grow">
                 {/* Hero Section */}
-                <section className="pt-32 pb-20 px-5 lg:px-8 max-w-7xl mx-auto text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold uppercase tracking-wider mb-6 border border-indigo-100">
-                        <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-                        </span>
-                        Now tracking Reddit & Twitter
-                    </div>
-                    <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-gray-900 mb-6 leading-tight max-w-4xl mx-auto">
-                        Stop searching for clients. <br className="hidden md:block" />
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">Start closing them.</span>
-                    </h1>
-                    <p className="text-lg md:text-xl text-gray-500 mb-10 max-w-2xl mx-auto leading-relaxed">
-                        SignalReach listens to social media for high-intent buyers, drafts the perfect personalized pitch, and drops them into a visual pipeline.
-                    </p>
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                        <Link href="/welcome" className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-indigo-200 transition-all active:scale-95 flex items-center justify-center gap-2">
-                            Start your free pipeline
-                            {/* @ts-expect-error custom element */}
-                            <iconify-icon icon="solar:arrow-right-linear" class="text-lg"></iconify-icon>
-                        </Link>
+                <section className="relative pt-24 pb-32 overflow-hidden">
+                    <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                        <div className="max-w-xl">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 text-xs font-medium mb-8">
+                                <span className="flex h-2 w-2 rounded-full bg-indigo-600"></span>
+                                SignalReach v2.0 is live
+                            </div>
+                            <h1 className="text-5xl md:text-6xl font-semibold tracking-tight text-[#111827] leading-[1.1]">
+                                Stop spamming. <br className="hidden md:block" />Start listening.
+                            </h1>
+                            <p className="mt-6 text-lg text-gray-500 leading-relaxed">
+                                Shift from bulk cold outreach to signal-based intent capture. Find and engage your next customers the exact moment they ask a relevant question on Reddit or Twitter.
+                            </p>
+                            <div className="mt-10 flex flex-col sm:flex-row gap-4">
+                                <Link href="/welcome" className="inline-flex justify-center items-center gap-2 text-sm font-medium bg-[#4F46E5] text-white px-6 py-3 rounded-lg hover:bg-[#4338CA] hover:-translate-y-0.5 shadow-sm hover:shadow-md transition-all">
+                                    Start Listening
+                                    {/* @ts-expect-error custom element */}
+                                    <iconify-icon icon="solar:arrow-right-linear" class="text-lg"></iconify-icon>
+                                </Link>
+                                <a href="#" className="inline-flex justify-center items-center gap-2 text-sm font-medium text-[#111827] bg-white border border-gray-200 px-6 py-3 rounded-lg hover:bg-gray-50 hover:-translate-y-0.5 shadow-sm hover:shadow-md transition-all">
+                                    {/* @ts-expect-error custom element */}
+                                    <iconify-icon icon="solar:play-circle-linear" class="text-lg text-gray-400"></iconify-icon>
+                                    See how it works
+                                </a>
+                            </div>
+                        </div>
+
+                        {/* Abstract UI Mockup */}
+                        <div className="relative w-full max-w-lg mx-auto lg:ml-auto">
+                            <div className="absolute -inset-1 bg-gradient-to-tr from-indigo-100 to-transparent rounded-[2rem] blur-2xl opacity-50"></div>
+                            <div className="relative bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col gap-4">
+                                <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                                    <div className="flex items-center gap-2 text-sm font-medium text-[#111827]">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:radar-linear" class="text-indigo-600 text-lg"></iconify-icon>
+                                        Live Intent Stream
+                                    </div>
+                                    <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 rounded text-xs font-medium text-green-700">
+                                        <span className="relative flex h-1.5 w-1.5">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+                                        </span>
+                                        Listening
+                                    </div>
+                                </div>
+
+                                {/* Mock Item 1 */}
+                                <div className="flex gap-4 p-3 rounded-xl hover:bg-[#F9FAFB] transition-colors cursor-pointer border border-transparent hover:border-gray-100 group">
+                                    <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:reddit-linear" class="text-xl"></iconify-icon>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <p className="text-sm font-medium text-[#111827] truncate">"Looking for alternatives to generic CRMs..."</p>
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[0.65rem] font-medium bg-indigo-50 text-indigo-600 border border-indigo-100">
+                                                98% Score
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
+                                            <span>r/SaaS</span>
+                                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                            <span>2 mins ago</span>
+                                        </div>
+                                        <div className="mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button className="text-xs font-medium bg-white border border-gray-200 text-[#111827] px-3 py-1.5 rounded-md hover:border-gray-300 shadow-sm">Draft Reply</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Mock Item 2 */}
+                                <div className="flex gap-4 p-3 rounded-xl hover:bg-[#F9FAFB] transition-colors cursor-pointer border border-transparent hover:border-gray-100 group">
+                                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:twitter-linear" class="text-xl"></iconify-icon>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <p className="text-sm font-medium text-[#111827] truncate">"Anyone know a tool that tracks brand mentions?"</p>
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[0.65rem] font-medium bg-indigo-50 text-indigo-600 border border-indigo-100">
+                                                85% Score
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
+                                            <span>@founder_jack</span>
+                                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                            <span>14 mins ago</span>
+                                        </div>
+                                        <div className="mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button className="text-xs font-medium bg-white border border-gray-200 text-[#111827] px-3 py-1.5 rounded-md hover:border-gray-300 shadow-sm">Draft Reply</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Mock Item 3 (Faded) */}
+                                <div className="flex gap-4 p-3 rounded-xl opacity-50">
+                                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:reddit-linear" class="text-xl"></iconify-icon>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <p className="text-sm font-medium text-[#111827] truncate">"Best resources for B2B sales outreach?"</p>
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[0.65rem] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                                42% Score
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
+                                            <span>r/sales</span>
+                                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                            <span>1 hour ago</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </section>
-                {/* Features Section */}
-                <section id="features" className="py-24 bg-gray-50 border-y border-gray-100">
-                    <div className="max-w-7xl mx-auto px-5 lg:px-8">
-                        <div className="text-center mb-16">
-                            <h2 className="text-3xl font-bold text-gray-900">Your automated outbound engine</h2>
-                            <p className="text-gray-500 mt-3">From scraping to closing in three seamless steps.</p>
+
+                {/* Social Proof */}
+                <section className="border-y border-gray-200/60 bg-[#F9FAFB] py-10">
+                    <div className="max-w-7xl mx-auto px-6">
+                        <p className="text-center text-xs font-medium uppercase tracking-wider text-gray-500 mb-6">Trusted by forward-thinking revenue teams</p>
+                        <div className="flex flex-wrap justify-center gap-8 md:gap-16 items-center opacity-60 grayscale">
+                            <span className="text-xl font-semibold tracking-tighter text-[#111827]">ACME CORP</span>
+                            <span className="text-xl font-semibold tracking-tight text-[#111827] flex items-center gap-1">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:globus-linear"></iconify-icon> GLOBEX
+                            </span>
+                            <span className="text-xl font-semibold tracking-widest text-[#111827]">SOYUZ</span>
+                            <span className="text-xl font-medium tracking-tight text-[#111827]">Initech</span>
+                            <span className="text-xl font-semibold tracking-tighter text-[#111827]">UMBRELLA</span>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Old Way vs New Way */}
+                <section className="py-24 md:py-32">
+                    <div className="max-w-7xl mx-auto px-6">
+                        <div className="text-center max-w-2xl mx-auto mb-16">
+                            <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-[#111827]">Growth is behavioral,<br /> not a numbers game.</h2>
+                            <p className="mt-4 text-gray-500 text-lg">Stop shouting into the void. Start inserting yourself naturally into conversations where buying intent is already present.</p>
                         </div>
 
-                        <div className="grid md:grid-cols-3 gap-8">
-                            {[
-                                { icon: 'solar:radar-linear', title: 'Deep Scraping', desc: 'We bypass API limits to find real-time posts from founders and clients begging for your exact skills.' },
-                                { icon: 'solar:magic-stick-3-linear', title: 'AI Copilot Drafting', desc: 'Gemini analyzes the prospect\'s post and writes a highly personalized, platform-optimized DM in seconds.' },
-                                { icon: 'solar:kanban-linear', title: 'Visual Pipeline', desc: 'Never lose a lead again. Triage, send, and follow-up seamlessly using our buttery-smooth Kanban board.' }
-                            ].map((feature, i) => (
-                                <div key={i} className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                            {/* Old Way */}
+                            <div className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-gray-200"></div>
+                                <h3 className="text-lg font-semibold text-[#111827] mb-6 flex items-center gap-2">
+                                    {/* @ts-expect-error custom element */}
+                                    <iconify-icon icon="solar:close-circle-linear" class="text-gray-400"></iconify-icon>
+                                    The Old Way
+                                </h3>
+                                <ul className="space-y-4">
+                                    <li className="flex items-start gap-3 text-sm text-gray-500">
                                         {/* @ts-expect-error custom element */}
-                                        <iconify-icon icon={feature.icon} class="text-2xl"></iconify-icon>
+                                        <iconify-icon icon="solar:minus-circle-linear" class="mt-0.5 text-gray-300"></iconify-icon>
+                                        Buying lead lists and bulk spamming cold emails.
+                                    </li>
+                                    <li className="flex items-start gap-3 text-sm text-gray-500">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:minus-circle-linear" class="mt-0.5 text-gray-300"></iconify-icon>
+                                        Celebrating a 0.1% reply rate as a "win".
+                                    </li>
+                                    <li className="flex items-start gap-3 text-sm text-gray-500">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:minus-circle-linear" class="mt-0.5 text-gray-300"></iconify-icon>
+                                        Burning through sending domains weekly.
+                                    </li>
+                                    <li className="flex items-start gap-3 text-sm text-gray-500">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:minus-circle-linear" class="mt-0.5 text-gray-300"></iconify-icon>
+                                        Annoying potential customers before they even know you.
+                                    </li>
+                                </ul>
+                            </div>
+
+                            {/* New Way */}
+                            <div className="bg-white rounded-2xl p-8 border border-indigo-200 shadow-sm relative overflow-hidden hover:-translate-y-0.5 hover:shadow-md transition-all">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-[#4F46E5]"></div>
+                                <h3 className="text-lg font-semibold text-[#111827] mb-6 flex items-center gap-2">
+                                    {/* @ts-expect-error custom element */}
+                                    <iconify-icon icon="solar:check-circle-linear" class="text-[#4F46E5]"></iconify-icon>
+                                    The SignalReach Way
+                                </h3>
+                                <ul className="space-y-4">
+                                    <li className="flex items-start gap-3 text-sm text-[#111827]">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:check-read-linear" class="mt-0.5 text-[#4F46E5]"></iconify-icon>
+                                        Capturing behavioral intent on Reddit &amp; Twitter.
+                                    </li>
+                                    <li className="flex items-start gap-3 text-sm text-[#111827]">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:check-read-linear" class="mt-0.5 text-[#4F46E5]"></iconify-icon>
+                                        Engaging exactly when a problem is voiced.
+                                    </li>
+                                    <li className="flex items-start gap-3 text-sm text-[#111827]">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:check-read-linear" class="mt-0.5 text-[#4F46E5]"></iconify-icon>
+                                        High signal conversations with 40%+ conversion rates.
+                                    </li>
+                                    <li className="flex items-start gap-3 text-sm text-[#111827]">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:check-read-linear" class="mt-0.5 text-[#4F46E5]"></iconify-icon>
+                                        Building authentic pipeline through helpfulness.
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Feature Bento Grid */}
+                <section className="pb-32">
+                    <div className="max-w-7xl mx-auto px-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                            {/* Feature 1: Multi-platform */}
+                            <div className="col-span-1 md:col-span-2 bg-white border border-gray-200 rounded-2xl p-8 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden relative">
+                                <div className="relative z-10 max-w-md">
+                                    <div className="w-10 h-10 rounded-lg bg-[#F9FAFB] border border-gray-100 flex items-center justify-center text-gray-600 mb-6">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:satellite-linear" class="text-xl"></iconify-icon>
                                     </div>
-                                    <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
-                                    <p className="text-gray-500 leading-relaxed">{feature.desc}</p>
+                                    <h3 className="text-xl font-semibold text-[#111827] tracking-tight mb-2">Multi-platform listening</h3>
+                                    <p className="text-sm text-gray-500 leading-relaxed">
+                                        Monitor specific keywords, competitor mentions, and problem-statements across major social networks simultaneously. We filter the noise so you only see high-intent signals.
+                                    </p>
                                 </div>
-                            ))}
+                                {/* Abstract Deco */}
+                                <div className="absolute right-0 bottom-0 p-8 hidden sm:flex gap-2 opacity-50">
+                                    <div className="w-24 h-16 rounded border border-gray-200 bg-gray-50 flex items-center justify-center">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:reddit-linear" class="text-gray-400 text-2xl"></iconify-icon>
+                                    </div>
+                                    <div className="w-24 h-16 rounded border border-gray-200 bg-gray-50 flex items-center justify-center -translate-y-4">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:twitter-linear" class="text-gray-400 text-2xl"></iconify-icon>
+                                    </div>
+                                    <div className="w-24 h-16 rounded border border-gray-200 bg-gray-50 flex items-center justify-center">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:linkedin-linear" class="text-gray-400 text-2xl"></iconify-icon>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Feature 2: AI Drafting */}
+                            <div className="col-span-1 bg-white border border-gray-200 rounded-2xl p-8 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+                                <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 mb-6">
+                                    {/* @ts-expect-error custom element */}
+                                    <iconify-icon icon="solar:magic-stick-3-linear" class="text-xl"></iconify-icon>
+                                </div>
+                                <h3 className="text-xl font-semibold text-[#111827] tracking-tight mb-2">Contextual AI Drafting</h3>
+                                <p className="text-sm text-gray-500 leading-relaxed mb-6">
+                                    Generate hyper-personalized, context-aware replies instantly. Never sound like a bot; always sound like a helpful expert.
+                                </p>
+                                <div className="w-full h-24 rounded-lg bg-gray-50 border border-gray-100 p-3 flex flex-col gap-2">
+                                    <div className="w-3/4 h-2 bg-gray-200 rounded-full"></div>
+                                    <div className="w-full h-2 bg-gray-200 rounded-full"></div>
+                                    <div className="w-1/2 h-2 bg-gray-200 rounded-full"></div>
+                                    <div className="mt-auto self-end text-[10px] font-medium text-indigo-600 flex items-center gap-1">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:pen-new-square-linear"></iconify-icon> AI Generated
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Feature 3: Unified Inbox */}
+                            <div className="col-span-1 md:col-span-3 bg-white border border-gray-200 rounded-2xl p-8 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col md:flex-row items-center gap-8">
+                                <div className="md:w-1/3">
+                                    <div className="w-10 h-10 rounded-lg bg-[#F9FAFB] border border-gray-100 flex items-center justify-center text-gray-600 mb-6">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:inbox-linear" class="text-xl"></iconify-icon>
+                                    </div>
+                                    <h3 className="text-xl font-semibold text-[#111827] tracking-tight mb-2">The Unified Inbox</h3>
+                                    <p className="text-sm text-gray-500 leading-relaxed">
+                                        Don't jump between tabs. Manage every intent signal, draft replies, and track engagement from a single, tactile, keyboard-first interface.
+                                    </p>
+                                </div>
+                                <div className="md:w-2/3 w-full bg-[#F9FAFB] border border-gray-200 rounded-xl p-4 flex flex-col gap-2">
+                                    <div className="flex items-center justify-between px-3 py-2 bg-white rounded border border-gray-100">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                                            <span className="text-xs font-medium text-[#111827]">New lead requesting demo</span>
+                                        </div>
+                                        <span className="text-[10px] text-gray-400">Just now</span>
+                                    </div>
+                                    <div className="flex items-center justify-between px-3 py-2 bg-white rounded border border-gray-100">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-gray-300"></div>
+                                            <span className="text-xs text-gray-500">Mentioned competitor pricing</span>
+                                        </div>
+                                        <span className="text-[10px] text-gray-400">2h ago</span>
+                                    </div>
+                                    <div className="flex items-center justify-between px-3 py-2 bg-white rounded border border-gray-100">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-gray-300"></div>
+                                            <span className="text-xs text-gray-500">Asking about API integration</span>
+                                        </div>
+                                        <span className="text-[10px] text-gray-400">5h ago</span>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                 </section>
             </main>
-            <footer className="border-t border-gray-100 bg-white py-12 text-center text-gray-500 text-sm">
-                <p>© {new Date().getFullYear()} SignalReach. All rights reserved.</p>
+
+            {/* Footer */}
+            <footer className="border-t border-gray-200 bg-white pt-16 pb-8">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-12 md:gap-8 mb-16">
+                        <div className="col-span-1 md:col-span-1">
+                            <span className="font-semibold tracking-tighter text-lg text-[#111827]">SIGNALREACH</span>
+                            <p className="mt-4 text-xs text-gray-500 max-w-xs">
+                                High signal, low noise. The modern way to acquire users through behavioral intent.
+                            </p>
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-medium text-[#111827] mb-4">Product</h4>
+                            <ul className="space-y-3 text-sm text-gray-500">
+                                <li><a href="#" className="hover:text-[#111827] transition-colors">Features</a></li>
+                                <li><a href="#" className="hover:text-[#111827] transition-colors">Integrations</a></li>
+                                <li><Link href="/pricing" className="hover:text-[#111827] transition-colors">Pricing</Link></li>
+                                <li><a href="#" className="hover:text-[#111827] transition-colors">Changelog</a></li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-medium text-[#111827] mb-4">Resources</h4>
+                            <ul className="space-y-3 text-sm text-gray-500">
+                                <li><a href="#" className="hover:text-[#111827] transition-colors">Documentation</a></li>
+                                <li><a href="#" className="hover:text-[#111827] transition-colors">Blog</a></li>
+                                <li><a href="#" className="hover:text-[#111827] transition-colors">Community</a></li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-medium text-[#111827] mb-4">Stay updated</h4>
+                            <p className="text-xs text-gray-500 mb-3">Get product updates and outreach tips.</p>
+                            <form className="flex items-center">
+                                <input type="email" placeholder="Email address"
+                                    className="w-full bg-[#F9FAFB] text-sm text-[#111827] px-3 py-2 rounded-l-md border-transparent focus:bg-gray-100 focus:outline-none focus:ring-0 transition-colors placeholder:text-gray-400"
+                                    required={true} />
+                                <button type="submit"
+                                    className="bg-[#111827] text-white px-3 py-2 rounded-r-md text-sm font-medium hover:bg-gray-800 transition-colors border border-[#111827]">
+                                    {/* @ts-expect-error custom element */}
+                                    <iconify-icon icon="solar:arrow-right-linear"></iconify-icon>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    <div className="pt-8 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <p className="text-xs text-gray-400">© 2024 SignalReach Inc. All rights reserved.</p>
+                        <div className="flex items-center gap-4 text-gray-400">
+                            <a href="#" className="hover:text-[#111827] transition-colors">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:twitter-linear" class="text-lg"></iconify-icon>
+                            </a>
+                            <a href="#" className="hover:text-[#111827] transition-colors">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:github-linear" class="text-lg"></iconify-icon>
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </footer>
         </div>
     );
