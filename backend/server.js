@@ -6,6 +6,8 @@ const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { ApifyClient } = require('apify-client');
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
+const cron = require('node-cron');
 
 // ── Environment ──────────────────────────────────────────────────────────────
 dotenv.config();
@@ -60,6 +62,65 @@ app.use(
     })
 );
 
+// ── Webhooks ─────────────────────────────────────────────────────────────────
+
+// Webhook route needs raw body for signature verification
+app.post('/api/webhook/lemonsqueezy', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+        const secret = process.env.LEMON_SQUEEZY_WEBHOOK_SECRET;
+        if (!secret) {
+            console.error('LEMON_SQUEEZY_WEBHOOK_SECRET is missing');
+            return res.status(500).json({ error: 'Webhook secret not configured' });
+        }
+
+        const hmac = crypto.createHmac('sha256', secret);
+        const digest = Buffer.from(hmac.update(req.body).digest('hex'), 'utf8');
+        const signature = Buffer.from(req.get('X-Signature') || '', 'utf8');
+
+        if (!crypto.timingSafeEqual(digest, signature)) {
+            return res.status(401).json({ error: 'Invalid signature' });
+        }
+
+        const payload = JSON.parse(req.body.toString('utf8'));
+        const eventName = payload.meta.event_name;
+
+        console.log(`[Webhook] Received LemonSqueezy event: ${eventName}`);
+
+        if (eventName === 'order_created' || eventName === 'subscription_created' || eventName === 'subscription_updated') {
+            const customerEmail = payload.data.attributes.user_email;
+            const productName = (payload.data.attributes.first_order_item?.product_name || payload.data.attributes.product_name || '').toLowerCase();
+
+            let tier = 'freelancer'; // Default fallback
+            if (productName.includes('agency')) {
+                tier = 'agency';
+            } else if (productName.includes('freelancer') || productName.includes('pro')) {
+                tier = 'freelancer';
+            }
+
+            const userId = payload.meta.custom_data?.user_id;
+
+            if (userId) {
+                await supabaseAdmin.from('users').update({ subscription_tier: tier }).eq('id', userId);
+                console.log(`[Webhook] Upgraded user ${userId} to ${tier} via custom_data`);
+            } else if (customerEmail) {
+                // Fallback to email matching
+                const { data: user } = await supabaseAdmin.from('users').select('id').eq('email', customerEmail).single();
+                if (user) {
+                    await supabaseAdmin.from('users').update({ subscription_tier: tier }).eq('id', user.id);
+                    console.log(`[Webhook] Upgraded user ${user.id} (via email ${customerEmail}) to ${tier}`);
+                } else {
+                    console.warn(`[Webhook] User not found for email: ${customerEmail}`);
+                }
+            }
+        }
+
+        res.status(200).json({ received: true });
+    } catch (err) {
+        console.error('Webhook Error:', err);
+        res.status(400).json({ error: `Webhook Error: ${err.message}` });
+    }
+});
+
 app.use(express.json());
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -84,20 +145,20 @@ function buildPrompt(postContext, platform, tone) {
 
     const toneDesc = toneMap[tone.toLowerCase()] ?? toneMap['friendly'];
 
-    let prompt = `You are a B2B SaaS founder doing smart, intent-based outreach.
+    let prompt = `You are a B2B SaaS founder doing smart, intent - based outreach.
 A prospect has just publicly posted the following on ${platform}:
 
-"${postContext}"
+            "${postContext}"
 
-Write a single, authentic reply to this post. Your goal is to start a genuine conversation — NOT to pitch immediately.
+Write a single, authentic reply to this post.Your goal is to start a genuine conversation — NOT to pitch immediately.
 
 Tone guide: ${toneDesc}
 
 Rules:
-- Write ONLY the reply text. No preamble, no "Here is the reply:", no quote of the original post.
+            - Write ONLY the reply text.No preamble, no "Here is the reply:", no quote of the original post.
 - Do not use hollow phrases like "Great post!" or "I totally agree!".
 - Reference something specific from their post to show you actually read it.
-- End with a soft conversation-starter (a question or light CTA).`;
+- End with a soft conversation - starter(a question or light CTA).`;
 
     // Platform-specific constraint
     if (platform.toLowerCase() === 'twitter') {
@@ -137,15 +198,129 @@ function requireCronSecret(req, res, next) {
  *
  * Designed to be called by a cron service (e.g. Vercel Cron, GitHub Actions).
  */
+async function runAutomatedScrape(workspaceId, rawKeywords, platforms) {
+    if (!rawKeywords) return 0;
+    const keywordArray = rawKeywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
+    if (!keywordArray.length) return 0;
+
+    const oneWeekAgoMs = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const oneWeekAgoDate = new Date(oneWeekAgoMs);
+    const twitterSinceDate = oneWeekAgoDate.toISOString().split('T')[0];
+    const isRecent = (dateString) => {
+        if (!dateString) return true;
+        return new Date(dateString).getTime() >= oneWeekAgoMs;
+    };
+
+    const scrapeTasks = [];
+    if (platforms.has('reddit')) {
+        scrapeTasks.push((async () => {
+            const run = await apify.actor('trudax/reddit-scraper-lite').call({
+                searches: keywordArray,
+                maxItems: 15,
+                maxPostCount: 15,
+                sort: "new",
+                time: "week"
+            });
+            const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+            const lowerCaseKeywords = keywordArray.map(k => k.toLowerCase());
+            return items.filter(i => {
+                if (!(i.body || i.title)) return false;
+                const text = String(i.body || i.title).toLowerCase();
+                const hasExactKeyword = lowerCaseKeywords.some(kw => text.includes(kw));
+                return hasExactKeyword && isRecent(i.createdAt || i.created_at || i.parsedCreatedAt);
+            }).map(item => ({
+                workspace_id: workspaceId,
+                platform: 'reddit',
+                intent_score: 'Medium',
+                original_post_id: String(item.id || item.parsedId || item.url || Date.now()),
+                author_handle: String(item.username || item.author || 'Unknown User'),
+                post_content: String(item.body || item.title || '').substring(0, 1000),
+                post_url: item.url,
+                status: 'new'
+            }));
+        })());
+    }
+    if (platforms.has('twitter')) {
+        scrapeTasks.push((async () => {
+            const run = await apify.actor('fastcrawler/tweet-x-twitter-scraper-0-2-1k-pay-per-result-v2').call({
+                searchTerms: keywordArray.map(k => `${k} since:${twitterSinceDate} `),
+                maxItems: 10,
+                searchMode: "live"
+            });
+            const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+            return items.filter(i => (i.text || i.full_text) && isRecent(i.createdAt || i.created_at)).map(item => ({
+                workspace_id: workspaceId,
+                platform: 'twitter',
+                intent_score: 'Medium',
+                original_post_id: String(item.id || item.url || Date.now()),
+                author_handle: String(item.author?.userName || item.user?.screen_name || 'Unknown User'),
+                post_content: String(item.text || item.full_text || '').substring(0, 1000),
+                post_url: item.url,
+                status: 'new'
+            }));
+        })());
+    }
+    if (platforms.has('linkedin')) {
+        const linkedInPromises = keywordArray.map(async (keyword) => {
+            try {
+                const run = await apify.actor('harvestapi/linkedin-post-search').call({
+                    keywords: keyword,
+                    maxResults: 15
+                });
+                const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+                return items || [];
+            } catch (err) {
+                console.error(`LinkedIn scrape failed for keyword: ${keyword}`, err);
+                return [];
+            }
+        });
+        scrapeTasks.push((async () => {
+            const resultsArray = await Promise.all(linkedInPromises);
+            const allItems = resultsArray.flat();
+            const lowerCaseKeywords = keywordArray.map(k => k.toLowerCase());
+            return allItems.filter(i => {
+                if (!i.text) return false;
+                const text = i.text.toLowerCase();
+                const hasExactKeyword = lowerCaseKeywords.some(kw => text.includes(kw));
+                return hasExactKeyword && isRecent(i.postedAt || i.date);
+            }).map(item => ({
+                workspace_id: workspaceId,
+                platform: 'linkedin',
+                intent_score: 'Medium',
+                original_post_id: String(item.urn || item.postUrl || item.url || Date.now()),
+                author_handle: String(item.authorName || item.author?.name || 'Unknown User'),
+                post_content: String(item.text || '').substring(0, 1000),
+                post_url: item.postUrl || item.url,
+                status: 'new'
+            }));
+        })());
+    }
+
+    const results = await Promise.allSettled(scrapeTasks);
+    const signalsToInsert = [];
+    results.forEach(res => {
+        if (res.status === 'fulfilled' && res.value) {
+            signalsToInsert.push(...res.value);
+        } else if (res.status === 'rejected') {
+            console.error(`[Scrape] Platform scrape failed for ws ${workspaceId}:`, res.reason);
+        }
+    });
+
+    if (signalsToInsert.length > 0) {
+        const { count } = await supabaseAdmin.from('signals').insert(signalsToInsert, { count: 'exact' });
+        await supabaseAdmin.from('workspaces').update({ last_scraped_at: new Date().toISOString() }).eq('id', workspaceId);
+        return count || signalsToInsert.length;
+    }
+    return 0;
+}
+
 app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
-    console.log('🤖 Scrape endpoint triggered!');
-    // 1 ── Fetch workspaces and their connected platforms
+    console.log('🤖 Scrape endpoint triggered via HTTP cron!');
     const { data: workspaces, error: wsErr } = await supabaseAdmin.from('workspaces').select('id, keywords').not('keywords', 'is', null);
     const { data: profiles } = await supabaseAdmin.from('social_profiles').select('workspace_id, platform');
     if (wsErr || !workspaces || workspaces.length === 0) {
         return res.json({ inserted: 0, workspaces_scraped: 0 });
     }
-    // Group platforms by workspace ID
     const workspacePlatforms = {};
     if (profiles) {
         profiles.forEach(p => {
@@ -153,142 +328,56 @@ app.post('/api/cron/scrape', requireCronSecret, async (req, res) => {
             workspacePlatforms[p.workspace_id].add(p.platform);
         });
     }
+
     let totalInserted = 0;
     let workspacesScraped = 0;
 
-    // Calculate exactly 7 days ago for strict filtering and Twitter search
-    const oneWeekAgoMs = Date.now() - (7 * 24 * 60 * 60 * 1000);
-    const oneWeekAgoDate = new Date(oneWeekAgoMs);
-    const twitterSinceDate = oneWeekAgoDate.toISOString().split('T')[0];
-    // Helper function to rigorously check the date (safety net)
-    const isRecent = (dateString) => {
-        if (!dateString) return true;
-        return new Date(dateString).getTime() >= oneWeekAgoMs;
-    };
-
-    // 2 ── Process workspaces concurrently
     await Promise.allSettled(workspaces.map(async (workspace) => {
-        // Safely extract and trim keywords, defaulting to empty string if null
-        const rawKeywords = workspace.keywords ? workspace.keywords.trim() : '';
-        // HARD STOP: If keywords are empty after trimming, skip this workspace completely
-        if (!rawKeywords) {
-            console.log(`[cron/scrape] ⏭️  Skipping workspace ${workspace.id}: No valid keywords found.`);
-            return;
-        }
-
-        // Split by comma and clean up, so Apify gets an actual array of separate terms
-        const keywordArray = rawKeywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
-
-        const platforms = workspacePlatforms[workspace.id] || new Set(['reddit']); // Default to Reddit
-        const scrapeTasks = [];
-        //  REDDIT SCRAPER
-        if (platforms.has('reddit')) {
-            scrapeTasks.push((async () => {
-                const run = await apify.actor('trudax/reddit-scraper-lite').call({
-                    searches: keywordArray, // Removed quotes to bypass 403 WAF blocks
-                    maxItems: 15,
-                    maxPostCount: 15,
-                    sort: "new",
-                    time: "week" // Strictly limits extraction to the past 7 days
-                });
-                const { items } = await apify.dataset(run.defaultDatasetId).listItems();
-                const lowerCaseKeywords = keywordArray.map(k => k.toLowerCase());
-                return items.filter(i => {
-                    if (!(i.body || i.title)) return false;
-                    const text = String(i.body || i.title).toLowerCase();
-                    const hasExactKeyword = lowerCaseKeywords.some(kw => text.includes(kw));
-                    return hasExactKeyword && isRecent(i.createdAt || i.created_at || i.parsedCreatedAt);
-                }).map(item => ({
-                    workspace_id: workspace.id,
-                    platform: 'reddit',
-                    intent_score: 'Medium',
-                    original_post_id: String(item.id || item.parsedId || item.url || Date.now()),
-                    author_handle: String(item.username || item.author || 'Unknown User'),
-                    post_content: String(item.body || item.title || '').substring(0, 1000),
-                    post_url: item.url,
-                    status: 'new'
-                }));
-            })());
-        }
-        // 🔵 TWITTER SCRAPER (Using fastcrawler)
-        if (platforms.has('twitter')) {
-            scrapeTasks.push((async () => {
-                const run = await apify.actor('fastcrawler/tweet-x-twitter-scraper-0-2-1k-pay-per-result-v2').call({
-                    searchTerms: keywordArray.map(k => `${k} since:${twitterSinceDate}`),
-                    maxItems: 10,
-                    searchMode: "live"
-                });
-                const { items } = await apify.dataset(run.defaultDatasetId).listItems();
-
-                return items.filter(i => (i.text || i.full_text) && isRecent(i.createdAt || i.created_at)).map(item => ({
-                    workspace_id: workspace.id,
-                    platform: 'twitter',
-                    intent_score: 'Medium',
-                    original_post_id: String(item.id || item.url || Date.now()),
-                    author_handle: String(item.author?.userName || item.user?.screen_name || 'Unknown User'),
-                    post_content: String(item.text || item.full_text || '').substring(0, 1000),
-                    post_url: item.url,
-                    status: 'new'
-                }));
-            })());
-        }
-
-        // 👔 LINKEDIN SCRAPER (Parallel searches per keyword)
-        if (platforms.has('linkedin')) {
-            const linkedInPromises = keywordArray.map(async (keyword) => {
-                try {
-                    const run = await apify.actor('harvestapi/linkedin-post-search').call({
-                        keywords: keyword, // Removed quotes so LinkedIn actually returns data
-                        maxResults: 15
-                    });
-                    const { items } = await apify.dataset(run.defaultDatasetId).listItems();
-                    return items || [];
-                } catch (err) {
-                    console.error(`LinkedIn scrape failed for keyword: ${keyword}`, err);
-                    return [];
-                }
-            });
-            scrapeTasks.push((async () => {
-                const resultsArray = await Promise.all(linkedInPromises);
-                const allItems = resultsArray.flat(); // Combine all keyword results
-
-                const lowerCaseKeywords = keywordArray.map(k => k.toLowerCase());
-                return allItems.filter(i => {
-                    if (!i.text) return false;
-                    const text = i.text.toLowerCase();
-                    const hasExactKeyword = lowerCaseKeywords.some(kw => text.includes(kw));
-                    return hasExactKeyword && isRecent(i.postedAt || i.date);
-                }).map(item => ({
-                    workspace_id: workspace.id,
-                    platform: 'linkedin',
-                    intent_score: 'Medium',
-                    original_post_id: String(item.urn || item.postUrl || item.url || Date.now()),
-                    author_handle: String(item.authorName || item.author?.name || 'Unknown User'),
-                    post_content: String(item.text || '').substring(0, 1000),
-                    post_url: item.postUrl || item.url,
-                    status: 'new'
-                }));
-            })());
-        }
-        // Wait for all selected platform scrapers to finish for this workspace
-        const results = await Promise.allSettled(scrapeTasks);
-
-        // Flatten all successful data into one array
-        const signalsToInsert = [];
-        results.forEach(res => {
-            if (res.status === 'fulfilled' && res.value) {
-                signalsToInsert.push(...res.value);
-            } else if (res.status === 'rejected') {
-                console.error(`[cron/scrape] ❌ Platform scrape failed for ws ${workspace.id}:`, res.reason);
-            }
-        });
-        if (signalsToInsert.length > 0) {
-            const { count } = await supabaseAdmin.from('signals').insert(signalsToInsert, { count: 'exact' });
-            totalInserted += count || signalsToInsert.length;
+        const platforms = workspacePlatforms[workspace.id] || new Set(['reddit']);
+        const count = await runAutomatedScrape(workspace.id, workspace.keywords, platforms);
+        if (count > 0) {
+            totalInserted += count;
             workspacesScraped++;
         }
     }));
     return res.json({ ok: true, inserted: totalInserted, workspaces_scraped: workspacesScraped });
+});
+
+app.post('/api/scrape', async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'];
+        if (!authHeader) return res.status(401).json({ error: 'Missing authorization header' });
+
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+        if (authErr || !user) return res.status(401).json({ error: 'Invalid or missing token' });
+
+        const userId = user.id;
+        const { workspaceId, keywords } = req.body;
+        if (!workspaceId) return res.status(400).json({ error: 'Missing workspaceId' });
+
+        const { data: userData } = await supabaseAdmin.from('users').select('subscription_tier').eq('id', userId).single();
+        const tier = userData?.subscription_tier || 'free';
+
+        if (tier === 'free') {
+            const { data: wsData } = await supabaseAdmin.from('workspaces').select('last_scraped_at').eq('id', workspaceId).single();
+            if (wsData?.last_scraped_at) {
+                const hoursSinceLastScrape = (new Date() - new Date(wsData.last_scraped_at)) / (1000 * 60 * 60);
+                if (hoursSinceLastScrape < 24) {
+                    return res.status(429).json({ error: "Free tier allows 1 manual sync per 24 hours. Upgrade to unlock unlimited manual syncs!" });
+                }
+            }
+        }
+
+        const { data: profiles } = await supabaseAdmin.from('social_profiles').select('platform').eq('workspace_id', workspaceId);
+        const platforms = new Set(profiles?.map(p => p.platform) || ['reddit']);
+
+        const inserted = await runAutomatedScrape(workspaceId, keywords, platforms);
+        res.json({ success: true, inserted });
+    } catch (error) {
+        console.error('Manual scrape error:', error);
+        res.status(500).json({ error: 'Failed to scrape manually' });
+    }
 });
 
 // ── 404 catch-all ────────────────────────────────────────────────────────────
@@ -305,19 +394,19 @@ app.post('/api/generate-keywords', async (req, res) => {
         const { niche } = req.body;
         if (!niche) return res.status(400).json({ error: 'Niche is required' });
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-        const prompt = `You are an expert lead generation specialist building exact-match search queries for a social media scraper (Reddit, Twitter, LinkedIn). 
+        const prompt = `You are an expert lead generation specialist building exact - match search queries for a social media scraper(Reddit, Twitter, LinkedIn). 
 The user's niche or job title is: "${niche}".
-Generate exactly 4 short, highly specific, high-intent search phrases that a founder or client would naturally type when looking to hire for this exact niche, or when expressing a problem this niche solves.
+Generate exactly 4 short, highly specific, high - intent search phrases that a founder or client would naturally type when looking to hire for this exact niche, or when expressing a problem this niche solves.
 
 STRICT RULES:
 
 Keep phrases under 6 words.
 
-Use natural, everyday human language (e.g., "hiring a product designer", "need a UI revamp", "looking for freelance UX").
+Use natural, everyday human language(e.g., "hiring a product designer", "need a UI revamp", "looking for freelance UX").
 
-DO NOT invent acronyms. Stick strictly to widely known industry terms based on the user's input.
+DO NOT invent acronyms.Stick strictly to widely known industry terms based on the user's input.
 
-CRITICAL: Return ONLY a single line of comma-separated phrases. No bullet points, no quotation marks, no conversational text.`;
+        CRITICAL: Return ONLY a single line of comma - separated phrases.No bullet points, no quotation marks, no conversational text.`;
 
         const result = await model.generateContent(prompt);
         const keywords = result.response.text().trim();
@@ -340,16 +429,16 @@ app.post('/api/generate-draft', async (req, res) => {
         if (!post_content) return res.status(400).json({ error: 'Post content required' });
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-        let prompt = `You are an expert sales development rep. A prospect posted this on social media:\n\n"${post_content}"\n\nWrite a highly personalized direct message to pitch a freelance design or UX service.`;
+        let prompt = `You are an expert sales development rep.A prospect posted this on social media: \n\n"${post_content}"\n\nWrite a highly personalized direct message to pitch a freelance design or UX service.`;
         if (tone) prompt += `\nUse a ${tone} tone.`;
-        if (instructions) prompt += `\nAdditional instructions from the user: ${instructions}`;
+        if (instructions) prompt += `\nAdditional instructions from the user: ${instructions} `;
 
         if (platform?.toLowerCase() === 'twitter') {
-            prompt += `\n\nCRITICAL RULE: This is for Twitter. You MUST keep the entire response under 40 words total. Do not exceed 40 words. Make it punchy, no hashtags, no quotes.`;
+            prompt += `\n\nCRITICAL RULE: This is for Twitter.You MUST keep the entire response under 40 words total.Do not exceed 40 words.Make it punchy, no hashtags, no quotes.`;
         } else if (platform?.toLowerCase() === 'linkedin') {
-            prompt += `\n\nCRITICAL RULE: This is for LinkedIn. Keep it under 60 words total. No quotes.`;
+            prompt += `\n\nCRITICAL RULE: This is for LinkedIn.Keep it under 60 words total.No quotes.`;
         } else {
-            prompt += `\n\nCRITICAL RULE: Keep it natural, under 3 sentences. No quotes.`;
+            prompt += `\n\nCRITICAL RULE: Keep it natural, under 3 sentences.No quotes.`;
         }
 
         const result = await model.generateContent(prompt);
@@ -363,6 +452,62 @@ app.post('/api/generate-draft', async (req, res) => {
 // ── 404 catch-all ────────────────────────────────────────────────────────────
 app.use((_req, res) => {
     res.status(404).json({ error: 'Route not found.' });
+});
+
+// ── Automated Cron Schedules ─────────────────────────────────────────────────
+
+// EVERY 6 HOURS: Only Agency users who selected '6h'
+cron.schedule('0 0,6,12,18 * * *', async () => {
+    console.log('[Cron] Running 6h scrape schedule...');
+    const { data: workspaces } = await supabaseAdmin
+        .from('workspaces')
+        .select('id, keywords, user_id, users!inner(subscription_tier)')
+        .eq('scrape_frequency', '6h')
+        .eq('users.subscription_tier', 'agency');
+
+    if (workspaces) {
+        for (const ws of workspaces) {
+            const { data: profiles } = await supabaseAdmin.from('social_profiles').select('platform').eq('workspace_id', ws.id);
+            const platforms = new Set(profiles?.map(p => p.platform) || ['reddit']);
+            await runAutomatedScrape(ws.id, ws.keywords, platforms);
+        }
+    }
+});
+
+// DAILY (Midnight): Freelancer or Agency users who selected '24h'
+cron.schedule('0 0 * * *', async () => {
+    console.log('[Cron] Running 24h scrape schedule...');
+    const { data: workspaces } = await supabaseAdmin
+        .from('workspaces')
+        .select('id, keywords, user_id, users!inner(subscription_tier)')
+        .eq('scrape_frequency', '24h')
+        .in('users.subscription_tier', ['freelancer', 'agency']);
+
+    if (workspaces) {
+        for (const ws of workspaces) {
+            const { data: profiles } = await supabaseAdmin.from('social_profiles').select('platform').eq('workspace_id', ws.id);
+            const platforms = new Set(profiles?.map(p => p.platform) || ['reddit']);
+            await runAutomatedScrape(ws.id, ws.keywords, platforms);
+        }
+    }
+});
+
+// WEEKLY (Sunday at Midnight): Anyone who selected '7d'
+cron.schedule('0 0 * * 0', async () => {
+    console.log('[Cron] Running 7d scrape schedule...');
+    const { data: workspaces } = await supabaseAdmin
+        .from('workspaces')
+        .select('id, keywords, user_id, users!inner(subscription_tier)')
+        .eq('scrape_frequency', '7d')
+        .in('users.subscription_tier', ['freelancer', 'agency']);
+
+    if (workspaces) {
+        for (const ws of workspaces) {
+            const { data: profiles } = await supabaseAdmin.from('social_profiles').select('platform').eq('workspace_id', ws.id);
+            const platforms = new Set(profiles?.map(p => p.platform) || ['reddit']);
+            await runAutomatedScrape(ws.id, ws.keywords, platforms);
+        }
+    }
 });
 
 // ── Start ────────────────────────────────────────────────────────────────────
