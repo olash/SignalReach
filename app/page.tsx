@@ -20,7 +20,7 @@ export default function LandingPage() {
                     {/* Desktop Menu */}
                     <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
                         <a href="#features" className="hover:text-gray-900 transition-colors">How it Works</a>
-                        <a href="#pricing" className="hover:text-gray-900 transition-colors">Pricing</a>
+                        <Link href="/pricing" className="hover:text-gray-900 transition-colors">Pricing</Link>
                         <div className="flex items-center gap-4 border-l border-gray-200 pl-8">
                             <Link href="/welcome" className="hover:text-gray-900 transition-colors">Sign In</Link>
                             <Link href="/welcome" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-all shadow-sm active:scale-95">
@@ -41,7 +41,7 @@ export default function LandingPage() {
                 {isMobileMenuOpen && (
                     <div className="md:hidden absolute top-16 inset-x-0 bg-white border-b border-gray-100 shadow-lg py-4 px-5 flex flex-col gap-4 z-50">
                         <a href="#features" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-600 font-medium">How it Works</a>
-                        <a href="#pricing" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-600 font-medium">Pricing</a>
+                        <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-600 font-medium">Pricing</Link>
                         <div className="h-px bg-gray-100 my-2"></div>
                         <Link href="/welcome" className="text-gray-600 font-medium text-center py-2">Sign In</Link>
                         <Link href="/welcome" className="bg-indigo-600 text-white font-medium text-center py-2.5 rounded-lg shadow-sm">Get Started Free</Link>
@@ -96,110 +96,6 @@ export default function LandingPage() {
                                     <p className="text-gray-500 leading-relaxed">{feature.desc}</p>
                                 </div>
                             ))}
-                        </div>
-                    </div>
-                </section>
-                {/* Pricing Section */}
-                <section id="pricing" className="py-24 max-w-7xl mx-auto px-5 lg:px-8">
-                    <div className="text-center mb-16">
-                        <h2 className="text-3xl font-bold text-gray-900">Simple, transparent pricing</h2>
-                        <p className="text-gray-500 mt-3">Scale your outbound without scaling your headcount.</p>
-                    </div>
-                    <div className="grid lg:grid-cols-3 gap-8 max-w-6xl mx-auto items-center">
-                        {/* Free Tier */}
-                        <div className="bg-white p-8 rounded-3xl border border-gray-200">
-                            <h3 className="text-xl font-bold text-gray-900">Hustler</h3>
-                            <p className="text-gray-500 mt-2 text-sm">Perfect to test the waters.</p>
-                            <div className="my-6">
-                                <span className="text-4xl font-extrabold text-gray-900">$0</span>
-                                <span className="text-gray-500 font-medium">/mo</span>
-                            </div>
-                            <ul className="space-y-4 mb-8">
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
-                                    15 AI Drafts / month
-                                </li>
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
-                                    1 Workspace
-                                </li>
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
-                                    Manual Scraping
-                                </li>
-                            </ul>
-                            <Link href="/welcome" className="block w-full py-3 px-4 bg-gray-50 hover:bg-gray-100 text-gray-900 text-center font-semibold rounded-xl border border-gray-200 transition-colors">
-                                Get Started
-                            </Link>
-                        </div>
-                        {/* Pro Tier */}
-                        <div className="bg-white p-8 rounded-3xl border-2 border-indigo-600 shadow-xl relative transform lg:-translate-y-4 z-10">
-                            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                                Most Popular
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900">Freelancer</h3>
-                            <p className="text-gray-500 mt-2 text-sm">A steady stream of contract work.</p>
-                            <div className="my-6">
-                                <span className="text-4xl font-extrabold text-gray-900">$29</span>
-                                <span className="text-gray-500 font-medium">/mo</span>
-                            </div>
-                            <ul className="space-y-4 mb-8">
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-indigo-600 text-lg"></iconify-icon>
-                                    <span className="font-semibold text-gray-900">250 AI Drafts / month</span>
-                                </li>
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-indigo-600 text-lg"></iconify-icon>
-                                    3 Workspaces
-                                </li>
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-indigo-600 text-lg"></iconify-icon>
-                                    Daily Automated Scraping
-                                </li>
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-indigo-600 text-lg"></iconify-icon>
-                                    Multi-tone AI Engine
-                                </li>
-                            </ul>
-                            <Link href="/welcome" className="block w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-center font-semibold rounded-xl shadow-sm transition-colors active:scale-95">
-                                Start Pro Trial
-                            </Link>
-                        </div>
-                        {/* Agency Tier */}
-                        <div className="bg-white p-8 rounded-3xl border border-gray-200">
-                            <h3 className="text-xl font-bold text-gray-900">Agency</h3>
-                            <p className="text-gray-500 mt-2 text-sm">For SDRs running multiple clients.</p>
-                            <div className="my-6">
-                                <span className="text-4xl font-extrabold text-gray-900">$79</span>
-                                <span className="text-gray-500 font-medium">/mo</span>
-                            </div>
-                            <ul className="space-y-4 mb-8">
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
-                                    <span className="font-semibold text-gray-900">1,000 AI Drafts / month</span>
-                                </li>
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
-                                    Unlimited Workspaces
-                                </li>
-                                <li className="flex items-center gap-3 text-gray-600">
-                                    {/* @ts-expect-error custom element */}
-                                    <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
-                                    Hourly Automated Scraping
-                                </li>
-                            </ul>
-                            <Link href="/welcome" className="block w-full py-3 px-4 bg-gray-50 hover:bg-gray-100 text-gray-900 text-center font-semibold rounded-xl border border-gray-200 transition-colors">
-                                Go Agency
-                            </Link>
                         </div>
                     </div>
                 </section>

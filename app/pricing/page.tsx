@@ -1,0 +1,131 @@
+'use client';
+import Link from 'next/link';
+
+export default function PricingPage() {
+    return (
+        <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-indigo-100 selection:text-indigo-900 pt-10">
+            {/* Minimal Header for Pricing */}
+            <header className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+                <nav className="max-w-7xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
+                    <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-sm">
+                            {/* @ts-expect-error custom element */}
+                            <iconify-icon icon="solar:radar-linear" class="text-xl"></iconify-icon>
+                        </div>
+                        <span className="text-xl font-bold tracking-tight text-gray-900">SignalReach</span>
+                    </Link>
+                    <div className="flex items-center gap-4">
+                        <Link href="/welcome" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Sign In</Link>
+                        <Link href="/welcome" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-all shadow-sm active:scale-95">
+                            Get Started Free
+                        </Link>
+                    </div>
+                </nav>
+            </header>
+
+            <main className="py-20 max-w-7xl mx-auto px-5 lg:px-8 mt-12">
+                <div className="text-center mb-16">
+                    <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">Simple, transparent pricing</h1>
+                    <p className="text-lg text-gray-500">Scale your outbound without scaling your headcount.</p>
+                </div>
+                <div className="grid lg:grid-cols-3 gap-8 max-w-6xl mx-auto items-center">
+                    {/* Free Tier */}
+                    <div className="bg-white p-8 rounded-3xl border border-gray-200 hover:border-gray-300 transition-colors">
+                        <h3 className="text-xl font-bold text-gray-900">Hustler</h3>
+                        <p className="text-gray-500 mt-2 text-sm">Perfect to test the waters.</p>
+                        <div className="my-6">
+                            <span className="text-4xl font-extrabold text-gray-900">$0</span>
+                            <span className="text-gray-500 font-medium">/mo</span>
+                        </div>
+                        <ul className="space-y-4 mb-8">
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
+                                15 AI Drafts / month
+                            </li>
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
+                                1 Workspace
+                            </li>
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
+                                Manual Scraping (24h cooldown)
+                            </li>
+                        </ul>
+                        <Link href="/welcome" className="block w-full py-3 px-4 bg-gray-50 hover:bg-gray-100 text-gray-900 text-center font-semibold rounded-xl border border-gray-200 transition-colors">
+                            Sign Up Free
+                        </Link>
+                    </div>
+                    {/* Pro Tier */}
+                    <div className="bg-white p-8 rounded-3xl border-2 border-indigo-600 shadow-xl relative transform lg:-translate-y-4 z-10">
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                            Most Popular
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900">Freelancer</h3>
+                        <p className="text-gray-500 mt-2 text-sm">A steady stream of contract work.</p>
+                        <div className="my-6">
+                            <span className="text-4xl font-extrabold text-gray-900">$29</span>
+                            <span className="text-gray-500 font-medium">/mo</span>
+                        </div>
+                        <ul className="space-y-4 mb-8">
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-indigo-600 text-lg"></iconify-icon>
+                                <span className="font-semibold text-gray-900">250 AI Drafts / month</span>
+                            </li>
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-indigo-600 text-lg"></iconify-icon>
+                                3 Workspaces
+                            </li>
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-indigo-600 text-lg"></iconify-icon>
+                                Daily Automated Scraping
+                            </li>
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-indigo-600 text-lg"></iconify-icon>
+                                Multi-tone AI Engine
+                            </li>
+                        </ul>
+                        <Link href="/welcome" className="block w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-center font-semibold rounded-xl shadow-sm transition-colors active:scale-95">
+                            Start Pro Trial
+                        </Link>
+                    </div>
+                    {/* Agency Tier */}
+                    <div className="bg-white p-8 rounded-3xl border border-gray-200 hover:border-gray-300 transition-colors">
+                        <h3 className="text-xl font-bold text-gray-900">Agency</h3>
+                        <p className="text-gray-500 mt-2 text-sm">For SDRs running multiple clients.</p>
+                        <div className="my-6">
+                            <span className="text-4xl font-extrabold text-gray-900">$79</span>
+                            <span className="text-gray-500 font-medium">/mo</span>
+                        </div>
+                        <ul className="space-y-4 mb-8">
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
+                                <span className="font-semibold text-gray-900">1,000 AI Drafts / month</span>
+                            </li>
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
+                                Unlimited Workspaces
+                            </li>
+                            <li className="flex items-center gap-3 text-gray-600">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:check-circle-bold" class="text-gray-400 text-lg"></iconify-icon>
+                                Hourly Automated Scraping
+                            </li>
+                        </ul>
+                        <Link href="/welcome" className="block w-full py-3 px-4 bg-gray-50 hover:bg-gray-100 text-gray-900 text-center font-semibold rounded-xl border border-gray-200 transition-colors">
+                            Go Agency
+                        </Link>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+}
