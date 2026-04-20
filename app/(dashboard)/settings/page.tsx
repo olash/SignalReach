@@ -1,210 +1,307 @@
 'use client';
 
-import { useAuth } from '@/components/AuthContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, KeyboardEvent } from 'react';
+import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/AuthContext';
+import { useWorkspace } from '@/components/WorkspaceContext';
+
+type Tab = 'Account' | 'Profiles' | 'Pipelines';
+type Frequency = '6h' | '24h' | '7d';
+
+const TABS: Tab[] = ['Account', 'Profiles', 'Pipelines'];
+const FREQ_OPTS: { value: Frequency; label: string; desc: string }[] = [
+    { value: '6h', label: 'Every 6 hours', desc: 'Active campaigns' },
+    { value: '24h', label: 'Daily', desc: 'Recommended' },
+    { value: '7d', label: 'Weekly', desc: 'Light monitoring' },
+];
+
+const inputCls =
+    'w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:border-indigo-500 transition';
+const labelCls = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5';
 
 export default function SettingsPage() {
     const { user } = useAuth();
-    const [tier, setTier] = useState('free');
-    const [frequency, setFrequency] = useState('manual');
-    const [loading, setLoading] = useState(true);
-    const [toastMessage, setToastMessage] = useState<string | null>(null);
+    const { activeWorkspace } = useWorkspace();
+    const [tab, setTab] = useState<Tab>('Account');
+
+    // Account
+    const email = user?.email ?? '';
+    const [name, setName] = useState('');
+    const [origName, setOrigName] = useState('');
+    const [savingName, setSavingName] = useState(false);
+
+    // Profiles - Track current vs original
+    const [twitter, setTwitter] = useState('');
+    const [reddit, setReddit] = useState('');
+    const [linkedin, setLinkedin] = useState('');
+    const [origTwitter, setOrigTwitter] = useState('');
+    const [origReddit, setOrigReddit] = useState('');
+    const [origLinkedin, setOrigLinkedin] = useState('');
+    const [savingProfiles, setSavingProfiles] = useState(false);
+    const [loadingProfiles, setLoadingProfiles] = useState(true);
+
+    // Pipelines (formerly Integrations)
+    const [keywords, setKeywords] = useState<string[]>([]);
+    const [kwInput, setKwInput] = useState('');
+    const [freq, setFreq] = useState<Frequency>('24h');
+    const [savingInt, setSavingInt] = useState(false);
+    const [loadingInt, setLoadingInt] = useState(true);
 
     useEffect(() => {
-        if (!user) return;
-        const fetchSettings = async () => {
-            // Fetch User Tier
-            const { data: userData } = await supabase
-                .from('users')
-                .select('subscription_tier')
-                .eq('id', user.id)
-                .single();
-            if (userData?.subscription_tier) {
-                setTier(userData.subscription_tier);
-            }
-            // Fetch Workspace Scrape Frequency (Assumes user has 1 workspace for now or we fetch the first)
-            const { data: wsData } = await supabase
-                .from('workspaces')
-                .select('id, scrape_frequency')
-                .eq('user_id', user.id)
-                .limit(1)
-                .single();
-
-            if (wsData) {
-                setFrequency(wsData.scrape_frequency || 'manual');
-            }
-            setLoading(false);
-        };
-        fetchSettings();
+        const n = (user?.user_metadata?.full_name as string | undefined) ?? '';
+        setName(n); setOrigName(n);
     }, [user]);
 
-    // Construct the checkout URL, prefilling the email and optionally passing user_id to custom_data
-    const getCheckoutUrl = (variantId: string) => {
-        const checkoutUrl = new URL(`https://signalreach.lemonsqueezy.com/checkout/buy/${variantId}`);
-        if (user?.email) {
-            checkoutUrl.searchParams.set('checkout[email]', user.email);
+    const fetchProfiles = useCallback(async () => {
+        if (!user) return;
+        setLoadingProfiles(true);
+        const { data } = await supabase.from('social_profiles').select('platform,handle').eq('user_id', user.id);
+        if (data) {
+            data.forEach((r: { platform: string; handle: string }) => {
+                const h = r.handle || '';
+                if (r.platform === 'twitter') { setTwitter(h); setOrigTwitter(h); }
+                if (r.platform === 'reddit') { setReddit(h); setOrigReddit(h); }
+                if (r.platform === 'linkedin') { setLinkedin(h); setOrigLinkedin(h); }
+            });
         }
-        if (user?.id) {
-            checkoutUrl.searchParams.set('checkout[custom][user_id]', user.id);
-        }
-        return checkoutUrl.toString();
+        setLoadingProfiles(false);
+    }, [user]);
+
+    const fetchInt = useCallback(async () => {
+        if (!activeWorkspace) { setLoadingInt(false); return; }
+        setLoadingInt(true);
+        if (activeWorkspace.keywords) setKeywords(activeWorkspace.keywords.split(',').map((k: string) => k.trim()).filter(Boolean));
+        if (activeWorkspace.scrape_frequency) setFreq(activeWorkspace.scrape_frequency as Frequency);
+        setLoadingInt(false);
+    }, [activeWorkspace]);
+
+    useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
+    useEffect(() => { fetchInt(); }, [fetchInt]);
+
+    const saveName = async () => {
+        if (!name.trim()) return;
+        setSavingName(true);
+        const { error } = await supabase.auth.updateUser({ data: { full_name: name.trim() } });
+        if (error) toast.error('Failed to update name.'); else { setOrigName(name.trim()); toast.success('Name updated!'); }
+        setSavingName(false);
     };
 
-    const handleFrequencyChange = async (newFreq: string) => {
-        if (tier === 'free') return;
+    const saveProfiles = async () => {
+        if (!user) return;
+        setSavingProfiles(true);
 
-        if (tier === 'freelancer' && newFreq === '6h') {
-            setToastMessage("Upgrade to the Agency tier to sync every 6 hours!");
-            setTimeout(() => setToastMessage(null), 3000);
-            return;
+        const rowsToUpdate = [];
+        if (twitter.trim() !== origTwitter) rowsToUpdate.push({ platform: 'twitter', handle: twitter.trim() });
+        if (reddit.trim() !== origReddit) rowsToUpdate.push({ platform: 'reddit', handle: reddit.trim() });
+        if (linkedin.trim() !== origLinkedin) rowsToUpdate.push({ platform: 'linkedin', handle: linkedin.trim() });
+
+        if (rowsToUpdate.length > 0) {
+            const results = await Promise.all(rowsToUpdate.map(p =>
+                supabase.from('social_profiles').upsert({
+                    user_id: user.id,
+                    workspace_id: activeWorkspace?.id ?? null,
+                    platform: p.platform,
+                    handle: p.handle
+                }, { onConflict: 'user_id, platform' })
+            ));
+            const failed = results.find(r => r.error);
+            if (failed?.error) {
+                toast.error('Failed to save profiles.');
+                console.error(failed.error);
+            } else {
+                toast.success('Social handles saved!');
+                setOrigTwitter(twitter.trim());
+                setOrigReddit(reddit.trim());
+                setOrigLinkedin(linkedin.trim());
+            }
         }
+        setSavingProfiles(false);
+    };
 
-        setFrequency(newFreq);
+    const addKw = () => {
+        const v = kwInput.trim();
+        if (!v || keywords.includes(v)) { setKwInput(''); return; }
+        if (keywords.length >= 20) { toast.error('Max 20 keywords.'); return; }
+        setKeywords(p => [...p, v]); setKwInput('');
+    };
+    const onKwKey = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addKw(); }
+        else if (e.key === 'Backspace' && !kwInput) setKeywords(p => p.slice(0, -1));
+    };
 
-        // Update the First Workspace
-        const { data: wsData } = await supabase
+    const saveInt = async () => {
+        if (!activeWorkspace) { toast.error('No workspace found.'); return; }
+        setSavingInt(true);
+        const { error } = await supabase
             .from('workspaces')
-            .select('id')
-            .eq('user_id', user?.id)
-            .limit(1)
-            .single();
-
-        if (wsData) {
-            await supabase.from('workspaces').update({ scrape_frequency: newFreq }).eq('id', wsData.id);
-            setToastMessage("Scraping frequency updated successfully.");
-            setTimeout(() => setToastMessage(null), 3000);
-        }
+            .update({ keywords: keywords.join(', '), scrape_frequency: freq })
+            .eq('id', activeWorkspace.id);
+        if (error) toast.error('Failed to save.'); else toast.success('Integration settings saved!');
+        setSavingInt(false);
     };
 
-    if (loading) {
-        return (
-            <div className="p-8 max-w-4xl mx-auto animate-pulse flex flex-col gap-8">
-                <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-                <div className="h-64 bg-gray-100 rounded-xl"></div>
-            </div>
-        );
-    }
+    const SaveBtn = ({ onClick, busy, disabled, label, busyLabel }: {
+        onClick: () => void; busy: boolean; disabled?: boolean; label: string; busyLabel: string;
+    }) => (
+        <div className="flex justify-end">
+            <button onClick={onClick} disabled={busy || disabled}
+                className="flex items-center gap-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2.5 rounded-xl shadow-sm transition-all">
+                {/* @ts-expect-error custom element */}
+                <iconify-icon icon={busy ? 'solar:refresh-linear' : 'solar:diskette-linear'} class={`text-base ${busy ? 'animate-spin' : ''}`} />
+                {busy ? busyLabel : label}
+            </button>
+        </div>
+    );
+
+    const profilesChanged = twitter.trim() !== origTwitter || reddit.trim() !== origReddit || linkedin.trim() !== origLinkedin;
 
     return (
-        <div className="max-w-4xl mx-auto p-4 md:p-8">
-            <h1 className="text-2xl font-bold text-gray-900 mb-8">Settings & Billing</h1>
-
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
-                <h2 className="text-lg font-semibold text-gray-900 mb-2">Current Subscription</h2>
-                <div className="flex flex-wrap items-center gap-3 mb-6">
-                    <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm font-semibold uppercase tracking-wider">
-                        {tier} Plan
-                    </span>
-                    {tier === 'free' && <span className="text-gray-500 text-sm">Upgrade to unlock daily automated scraping & more drafts.</span>}
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-6">
-                    {/* Free Plan */}
-                    <div className={`p-6 rounded-xl border ${tier === 'free' ? 'border-indigo-600 bg-indigo-50/30' : 'border-gray-200 bg-gray-50'} relative`}>
-                        <h3 className="font-bold text-gray-900 text-lg">Hustler (Free)</h3>
-                        <p className="text-gray-500 text-sm mt-1 mb-6">15 AI Drafts/mo, 1 Workspace, Manual Scraping</p>
-                        {tier === 'free' ? (
-                            <span className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium">
-                                {/* @ts-expect-error custom element */}
-                                <iconify-icon icon="solar:check-circle-bold"></iconify-icon>
-                                Current Plan
-                            </span>
-                        ) : (
-                            <button disabled className="px-4 py-2 bg-gray-200 text-gray-500 rounded-lg text-sm font-medium cursor-not-allowed">
-                                Downgrade unavailable
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Freelancer Plan */}
-                    <div className={`p-6 rounded-xl border ${tier === 'freelancer' ? 'border-indigo-600 bg-indigo-50/30' : 'border-gray-200 bg-white shadow-sm'} relative`}>
-                        <h3 className="font-bold text-gray-900 text-lg">Freelancer ($29/mo)</h3>
-                        <p className="text-gray-500 text-sm mt-1 mb-6">250 AI Drafts/mo, 3 Workspaces, Daily Automated Scraping</p>
-                        {tier === 'freelancer' ? (
-                            <span className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium">
-                                {/* @ts-expect-error custom element */}
-                                <iconify-icon icon="solar:check-circle-bold"></iconify-icon>
-                                Current Plan
-                            </span>
-                        ) : (
-                            <a
-                                href={getCheckoutUrl('FREELANCER_VARIANT_ID')}
-                                className="inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                            >
-                                Upgrade to Freelancer
-                            </a>
-                        )}
-                    </div>
-
-                    {/* Agency Plan */}
-                    <div className={`p-6 rounded-xl border ${tier === 'agency' ? 'border-indigo-600 bg-indigo-50/30' : 'border-gray-200 bg-white shadow-sm'} relative`}>
-                        <h3 className="font-bold text-gray-900 text-lg">Agency ($79/mo)</h3>
-                        <p className="text-gray-500 text-sm mt-1 mb-6">1,000 AI Drafts/mo, Unlimited Workspaces, Hourly Automated Scraping</p>
-                        {tier === 'agency' ? (
-                            <span className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium">
-                                {/* @ts-expect-error custom element */}
-                                <iconify-icon icon="solar:check-circle-bold"></iconify-icon>
-                                Current Plan
-                            </span>
-                        ) : (
-                            <a
-                                href={getCheckoutUrl('AGENCY_VARIANT_ID')}
-                                className="inline-block px-4 py-2 bg-gray-900 hover:bg-black text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                            >
-                                Upgrade to Agency
-                            </a>
-                        )}
-                    </div>
-                </div>
-
-                {/* Scrape Frequency Section */}
-                <div className="mt-12 border-t border-gray-100 pt-8">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-2">Automated Scrape Frequency</h2>
-                    <p className="text-sm text-gray-500 mb-6">How often should SignalReach hunt for new leads for your workspace?</p>
-
-                    {tier === 'free' ? (
-                        <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
-                            <p className="text-gray-600 font-medium flex items-center gap-2">
-                                {/* @ts-expect-error custom element */}
-                                <iconify-icon icon="solar:info-circle-linear" class="text-gray-400 text-xl"></iconify-icon>
-                                Free plan requires manual sync via the Kanban board.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="flex flex-wrap gap-4">
-                            {['7d', '24h', '6h'].map((freq) => (
-                                <button
-                                    key={freq}
-                                    onClick={() => handleFrequencyChange(freq)}
-                                    className={`px-6 py-3 rounded-lg font-medium transition-all ${frequency === freq
-                                            ? 'bg-indigo-600 text-white shadow-md'
-                                            : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50'
-                                        }`}
-                                >
-                                    {freq === '7d' ? 'Weekly (7 Days)' : freq === '24h' ? 'Daily (24 Hours)' : 'Every 6 Hours'}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="mt-8 pt-6 border-t border-gray-100">
-                    <p className="text-sm text-gray-500">
-                        Need to manage your billing, update payment methods, or download invoices?
-                        <a href="https://signalreach.lemonsqueezy.com/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline ml-1">
-                            Go to Billing Portal
-                        </a>
-                    </p>
-                </div>
+        <div className="flex flex-col gap-6 max-w-2xl">
+            <div>
+                <h1 className="text-xl font-semibold text-gray-900 tracking-tight">Settings</h1>
+                <p className="text-sm text-gray-400 mt-0.5">Manage your account, profiles, and integrations.</p>
             </div>
 
-            {toastMessage && (
-                <div className="fixed bottom-8 right-8 bg-gray-900 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-fade-in-up z-50">
-                    {/* @ts-expect-error custom element */}
-                    <iconify-icon icon="solar:bell-bing-bold" class="text-indigo-400 text-xl"></iconify-icon>
-                    {toastMessage}
+            {/* Tab bar */}
+            <div className="flex items-center border-b border-gray-200 gap-1">
+                {TABS.map(t => (
+                    <button key={t} onClick={() => setTab(t)}
+                        className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${tab === t ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'}`}>
+                        {t}
+                    </button>
+                ))}
+            </div>
+
+            {/* ── ACCOUNT ── */}
+            {tab === 'Account' && (
+                <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 flex flex-col gap-5">
+                    <div>
+                        <label className={labelCls}>Email Address <span className="normal-case text-gray-400 font-normal">(cannot be changed)</span></label>
+                        <input type="email" disabled value={email} className="w-full text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 cursor-not-allowed opacity-50" />
+                    </div>
+                    <div>
+                        <label className={labelCls}>Full Name</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your name" className={inputCls} />
+                    </div>
+                    <SaveBtn onClick={saveName} busy={savingName} disabled={name.trim() === origName} label="Save Name" busyLabel="Saving…" />
                 </div>
+            )}
+
+            {/* ── PROFILES ── */}
+            {tab === 'Profiles' && (
+                <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 flex flex-col gap-5">
+                    <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+                            {/* @ts-expect-error custom element */}
+                            <iconify-icon icon="solar:user-circle-linear" class="text-sky-500 text-lg" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-semibold text-gray-900">Social Handles</h2>
+                            <p className="text-xs text-gray-400 mt-0.5">Used for monitoring your brand presence.</p>
+                        </div>
+                    </div>
+                    {loadingProfiles ? (
+                        <div className="space-y-3 animate-pulse">{[1, 2, 3].map(i => <div key={i} className="h-10 bg-gray-100 rounded-xl" />)}</div>
+                    ) : (
+                        <>
+                            <div>
+                                <label className={labelCls}>Twitter / X Handle</label>
+                                <div className="relative">
+                                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400 select-none">@</span>
+                                    <input type="text" placeholder="yourhandle" value={twitter} onChange={e => setTwitter(e.target.value)} className={`${inputCls} pl-8`} />
+                                </div>
+                            </div>
+                            <div>
+                                <label className={labelCls}>Reddit Username</label>
+                                <div className="relative">
+                                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400 select-none">u/</span>
+                                    <input type="text" placeholder="yourusername" value={reddit} onChange={e => setReddit(e.target.value)} className={`${inputCls} pl-10`} />
+                                </div>
+                            </div>
+                            <div>
+                                <label className={labelCls}>LinkedIn URL</label>
+                                <input type="url" placeholder="https://linkedin.com/in/you" value={linkedin} onChange={e => setLinkedin(e.target.value)} className={inputCls} />
+                            </div>
+                            <SaveBtn onClick={saveProfiles} busy={savingProfiles} disabled={!profilesChanged} label="Save Profiles" busyLabel="Saving…" />
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* ── PIPELINES ── */}
+            {tab === 'Pipelines' && (
+                <>
+                    {loadingInt ? (
+                        <div className="flex flex-col gap-4 animate-pulse">{[1, 2].map(i => <div key={i} className="h-32 bg-white border border-gray-200 rounded-xl" />)}</div>
+                    ) : (
+                        <>
+                            {/* Keywords */}
+                            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 flex flex-col gap-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:magnifer-zoom-in-linear" class="text-indigo-500 text-lg" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-sm font-semibold text-gray-900">Target Keywords</h2>
+                                        <p className="text-xs text-gray-400 mt-0.5">Press <kbd className="bg-gray-100 text-[10px] px-1 py-0.5 rounded font-mono">Enter</kbd> or <kbd className="bg-gray-100 text-[10px] px-1 py-0.5 rounded font-mono">,</kbd> to add.</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2 items-center p-3 bg-gray-50 border border-gray-200 rounded-xl min-h-[52px] focus-within:ring-2 focus-within:border-indigo-500 transition cursor-text"
+                                    onClick={() => document.getElementById('kw-input')?.focus()}>
+                                    {keywords.map(kw => (
+                                        <span key={kw} className="flex items-center gap-1.5 bg-indigo-600 text-white text-xs font-medium pl-3 pr-1.5 py-1 rounded-full">
+                                            {kw}
+                                            <button onClick={() => setKeywords(p => p.filter(k => k !== kw))} className="w-4 h-4 rounded-full bg-indigo-500 hover:bg-indigo-400 flex items-center justify-center transition-colors">
+                                                {/* @ts-expect-error custom element */}
+                                                <iconify-icon icon="solar:close-circle-linear" class="text-[10px]" />
+                                            </button>
+                                        </span>
+                                    ))}
+                                    <input id="kw-input" type="text" value={kwInput}
+                                        onChange={e => setKwInput(e.target.value)} onKeyDown={onKwKey} onBlur={addKw}
+                                        placeholder={keywords.length === 0 ? 'e.g. CRM tools, sales automation…' : ''}
+                                        className="flex-1 min-w-[120px] bg-transparent text-sm text-gray-700 placeholder-gray-300 focus:outline-none" />
+                                </div>
+                                <p className="text-[11px] text-gray-400">{keywords.length}/20 keywords</p>
+                            </div>
+
+                            {/* Frequency */}
+                            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 flex flex-col gap-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                                        {/* @ts-expect-error custom element */}
+                                        <iconify-icon icon="solar:clock-circle-linear" class="text-amber-500 text-lg" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-sm font-semibold text-gray-900">Scrape Frequency</h2>
+                                        <p className="text-xs text-gray-400 mt-0.5">How often should SignalReach scan for new signals?</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {FREQ_OPTS.map(o => (
+                                        <button key={o.value} onClick={() => setFreq(o.value)}
+                                            className={`flex flex-col items-center text-center gap-1 p-4 rounded-xl border-2 transition-all ${freq === o.value ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                                            <span className={`text-sm font-semibold ${freq === o.value ? 'text-indigo-700' : 'text-gray-700'}`}>{o.label}</span>
+                                            <span className={`text-[11px] ${freq === o.value ? 'text-indigo-400' : 'text-gray-400'}`}>{o.desc}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <p className="text-xs text-gray-400">Changes take effect on the next scraper run.</p>
+                                <button onClick={saveInt} disabled={savingInt}
+                                    className="flex items-center gap-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed px-6 py-2.5 rounded-xl shadow-sm transition-all">
+                                    {/* @ts-expect-error custom element */}
+                                    <iconify-icon icon={savingInt ? 'solar:refresh-linear' : 'solar:diskette-linear'} class={`text-base ${savingInt ? 'animate-spin' : ''}`} />
+                                    {savingInt ? 'Saving…' : 'Save Pipeline Settings'}
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </>
             )}
         </div>
     );

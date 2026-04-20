@@ -482,34 +482,7 @@ export default function DashboardPage() {
                                         ))}
                                         {provided.placeholder}
 
-                                        {/* Static paywall card — always visible as upgrade prompt */}
-                                        <div className="relative rounded-xl border border-gray-200 bg-white overflow-hidden">
-                                            <div className="p-4 blur-sm select-none opacity-60 pointer-events-none">
-                                                <PlatformBadge platform="linkedin" source="LinkedIn Post" />
-                                                <p className="mt-2 text-sm text-gray-700 leading-snug line-clamp-2">
-                                                    &ldquo;Our sales team is evaluating new prospecting tools this quarter…&rdquo;
-                                                </p>
-                                                <div className="mt-3 flex items-center justify-between">
-                                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-amber-100 text-amber-600 border-amber-200">Warm</span>
-                                                    <span className="text-[10px] text-gray-400">34 min ago</span>
-                                                </div>
-                                            </div>
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-[2px] px-4 text-center gap-2">
-                                                <div className="w-9 h-9 rounded-full bg-indigo-50 flex items-center justify-center">
-                                                    {/* @ts-expect-error custom element */}
-                                                    <iconify-icon icon="solar:lock-linear" class="text-indigo-500 text-lg" />
-                                                </div>
-                                                <p className="text-xs font-medium text-gray-700">
-                                                    <button
-                                                        onClick={() => toast('🚀 Upgrade to Pro to unlock 45+ more signals!', { icon: '✨' })}
-                                                        className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2 transition-colors"
-                                                    >
-                                                        Upgrade to Pro
-                                                    </button>{' '}
-                                                    to unlock 45 more signals.
-                                                </p>
-                                            </div>
-                                        </div>
+
                                     </div>
                                 )}
                             </Droppable>
