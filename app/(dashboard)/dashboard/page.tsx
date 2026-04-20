@@ -180,6 +180,7 @@ export default function DashboardPage() {
     const { activeWorkspace } = useWorkspace();
     const [signals, setSignals] = useState<Signal[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isScraping, setIsScraping] = useState(false);
     const [activeFilter, setActiveFilter] = useState<Platform>('all');
     const [panelOpen, setPanelOpen] = useState(false);
     const [panelProspect, setPanelProspect] = useState<PanelProspect | undefined>();
@@ -211,6 +212,38 @@ export default function DashboardPage() {
     }, [activeWorkspace]);
 
     useEffect(() => { fetchSignals(); }, [fetchSignals]);
+
+    const handleManualScrape = async () => {
+        if (!activeWorkspace) return;
+        setIsScraping(true);
+        const toastId = toast.loading('Running scraper (this may take a minute)...');
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080'}/api/scrape`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({
+                    workspaceId: activeWorkspace.id,
+                    keywords: activeWorkspace.keywords
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(data.error || 'Failed to sync manually', { id: toastId });
+            } else {
+                toast.success(`Scrape complete! Found ${data.inserted} new signals.`, { id: toastId });
+                fetchSignals();
+            }
+        } catch (error) {
+            console.error('Manual scrape error:', error);
+            toast.error('Scraping service is temporarily unavailable.', { id: toastId });
+        } finally {
+            setIsScraping(false);
+        }
+    };
 
     // ── Open AI panel ──────────────────────────────────────────────────────────
     const openPanel = (signal: Signal) => {
@@ -313,14 +346,25 @@ export default function DashboardPage() {
                     ))}
                 </div>
 
-                <button
-                    onClick={() => toast('Keyword management coming soon!', { icon: '⚙️' })}
-                    className="flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:scale-95 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 border border-indigo-100"
-                >
-                    {/* @ts-expect-error custom element */}
-                    <iconify-icon icon="solar:settings-linear" class="text-base" />
-                    Manage Keywords
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleManualScrape}
+                        disabled={isScraping || !activeWorkspace}
+                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 active:scale-95 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 shadow-sm"
+                    >
+                        {/* @ts-expect-error custom element */}
+                        <iconify-icon icon="solar:radar-bold" class={`text-base ${isScraping ? 'animate-spin' : ''}`} />
+                        {isScraping ? 'Scraping...' : 'Run Scraper'}
+                    </button>
+                    <button
+                        onClick={() => toast('Keyword management coming soon!', { icon: '⚙️' })}
+                        className="flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:scale-95 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 border border-indigo-100"
+                    >
+                        {/* @ts-expect-error custom element */}
+                        <iconify-icon icon="solar:settings-linear" class="text-base" />
+                        Manage Keywords
+                    </button>
+                </div>
             </div>
 
             {/* ── Kanban Board ─────────────────────────────────────────────────── */}
