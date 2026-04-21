@@ -10,7 +10,8 @@ const crypto = require('crypto');
 const cron = require('node-cron');
 
 // ── Environment ──────────────────────────────────────────────────────────────
-dotenv.config();
+const path = require('path');
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const PORT = process.env.PORT || 8080;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -511,6 +512,45 @@ cron.schedule('0 0 * * 0', async () => {
 });
 
 // ── Start ────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-    console.log(`[SignalReach] 🚀  Gateway running on http://localhost:${PORT}`);
-});
+if (process.argv.includes('--scrape')) {
+    console.log('[CLI] Running immediate manual scrape for all workspaces as requested...');
+    (async () => {
+        try {
+            const { data: workspaces, error: wsErr } = await supabaseAdmin.from('workspaces').select('id, keywords').not('keywords', 'is', null);
+            const { data: profiles } = await supabaseAdmin.from('social_profiles').select('workspace_id, platform');
+            if (wsErr || !workspaces || workspaces.length === 0) {
+                console.log('[CLI] No keywords or workspaces found to scrape.');
+                process.exit(0);
+            }
+            const workspacePlatforms = {};
+            if (profiles) {
+                profiles.forEach(p => {
+                    if (!workspacePlatforms[p.workspace_id]) workspacePlatforms[p.workspace_id] = new Set();
+                    workspacePlatforms[p.workspace_id].add(p.platform);
+                });
+            }
+
+            let totalInserted = 0;
+            let workspacesScraped = 0;
+
+            await Promise.allSettled(workspaces.map(async (workspace) => {
+                const platforms = workspacePlatforms[workspace.id] || new Set(['reddit']);
+                const count = await runAutomatedScrape(workspace.id, workspace.keywords, platforms);
+                if (count > 0) {
+                    totalInserted += count;
+                    workspacesScraped++;
+                }
+            }));
+            
+            console.log(`[CLI] Scrape Complete! Inserted ${totalInserted} signals across ${workspacesScraped} workspaces.`);
+            process.exit(0);
+        } catch (err) {
+            console.error('[CLI] Scrape Error:', err);
+            process.exit(1);
+        }
+    })();
+} else {
+    app.listen(PORT, () => {
+        console.log(`[SignalReach] 🚀  Gateway running on http://localhost:${PORT}`);
+    });
+}
