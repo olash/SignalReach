@@ -6,10 +6,10 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthContext';
 import { useWorkspace } from '@/components/WorkspaceContext';
 
-type Tab = 'Account' | 'Profiles' | 'Pipelines';
+type Tab = 'Account' | 'Profiles' | 'Pipelines' | 'Billing';
 type Frequency = '6h' | '24h' | '7d';
 
-const TABS: Tab[] = ['Account', 'Profiles', 'Pipelines'];
+const TABS: Tab[] = ['Account', 'Profiles', 'Pipelines', 'Billing'];
 const FREQ_OPTS: { value: Frequency; label: string; desc: string }[] = [
     { value: '6h', label: 'Every 6 hours', desc: 'Active campaigns' },
     { value: '24h', label: 'Daily', desc: 'Recommended' },
@@ -302,6 +302,48 @@ export default function SettingsPage() {
                         </>
                     )}
                 </>
+            )}
+
+            {/* ── BILLING ── */}
+            {tab === 'Billing' && (
+                <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 flex flex-col gap-6">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                                {/* @ts-expect-error custom element */}
+                                <iconify-icon icon="solar:card-2-linear" class="text-indigo-500 text-lg" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-gray-900">Current Plan</p>
+                                <p className="text-xs text-gray-400 mt-0.5">Your workspace is on the free tier.</p>
+                            </div>
+                        </div>
+                        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full shrink-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Free Tier
+                        </span>
+                    </div>
+                    <div className="rounded-xl border border-gray-100 divide-y divide-gray-100 overflow-hidden">
+                        {[
+                            { label: 'Signals per month', free: '100', pro: 'Unlimited' },
+                            { label: 'AI reply drafts', free: '10 / mo', pro: 'Unlimited' },
+                            { label: 'Platforms', free: 'Reddit only', pro: 'Reddit, Twitter, LinkedIn' },
+                            { label: 'Scrape frequency', free: 'Daily', pro: 'Every 6 hours' },
+                        ].map(r => (
+                            <div key={r.label} className="grid grid-cols-3 px-4 py-3 text-sm">
+                                <span className="text-gray-600">{r.label}</span>
+                                <span className="text-gray-400 text-center">{r.free}</span>
+                                <span className="text-indigo-600 font-medium text-center">{r.pro}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <button onClick={() => toast('Billing portal coming soon!', { icon: '💳' })}
+                        className="flex items-center justify-center gap-2 w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-sm font-semibold rounded-xl shadow-sm transition-all">
+                        {/* @ts-expect-error custom element */}
+                        <iconify-icon icon="solar:crown-star-linear" class="text-base" />
+                        Upgrade to Pro — $29/mo
+                    </button>
+                    <p className="text-center text-xs text-gray-400">No credit card required to try. Cancel anytime.</p>
+                </div>
             )}
         </div>
     );

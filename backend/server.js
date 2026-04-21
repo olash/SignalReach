@@ -62,6 +62,65 @@ app.use(
     })
 );
 
+// ── Webhooks ─────────────────────────────────────────────────────────────────
+
+// Webhook route needs raw body for signature verification
+app.post('/api/webhook/lemonsqueezy', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+        const secret = process.env.LEMON_SQUEEZY_WEBHOOK_SECRET;
+        if (!secret) {
+            console.error('LEMON_SQUEEZY_WEBHOOK_SECRET is missing');
+            return res.status(500).json({ error: 'Webhook secret not configured' });
+        }
+
+        const hmac = crypto.createHmac('sha256', secret);
+        const digest = Buffer.from(hmac.update(req.body).digest('hex'), 'utf8');
+        const signature = Buffer.from(req.get('X-Signature') || '', 'utf8');
+
+        if (!crypto.timingSafeEqual(digest, signature)) {
+            return res.status(401).json({ error: 'Invalid signature' });
+        }
+
+        const payload = JSON.parse(req.body.toString('utf8'));
+        const eventName = payload.meta.event_name;
+
+        console.log(`[Webhook] Received LemonSqueezy event: ${eventName}`);
+
+        if (eventName === 'order_created' || eventName === 'subscription_created' || eventName === 'subscription_updated') {
+            const customerEmail = payload.data.attributes.user_email;
+            const productName = (payload.data.attributes.first_order_item?.product_name || payload.data.attributes.product_name || '').toLowerCase();
+
+            let tier = 'freelancer'; // Default fallback
+            if (productName.includes('agency')) {
+                tier = 'agency';
+            } else if (productName.includes('freelancer') || productName.includes('pro')) {
+                tier = 'freelancer';
+            }
+
+            const userId = payload.meta.custom_data?.user_id;
+
+            if (userId) {
+                await supabaseAdmin.from('users').update({ subscription_tier: tier }).eq('id', userId);
+                console.log(`[Webhook] Upgraded user ${userId} to ${tier} via custom_data`);
+            } else if (customerEmail) {
+                // Fallback to email matching
+                const { data: user } = await supabaseAdmin.from('users').select('id').eq('email', customerEmail).single();
+                if (user) {
+                    await supabaseAdmin.from('users').update({ subscription_tier: tier }).eq('id', user.id);
+                    console.log(`[Webhook] Upgraded user ${user.id} (via email ${customerEmail}) to ${tier}`);
+                } else {
+                    console.warn(`[Webhook] User not found for email: ${customerEmail}`);
+                }
+            }
+        }
+
+        res.status(200).json({ received: true });
+    } catch (err) {
+        console.error('Webhook Error:', err);
+        res.status(400).json({ error: `Webhook Error: ${err.message}` });
+    }
+});
+
 app.use(express.json());
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -297,6 +356,19 @@ app.post('/api/scrape', async (req, res) => {
         const { workspaceId, keywords } = req.body;
         if (!workspaceId) return res.status(400).json({ error: 'Missing workspaceId' });
 
+        const { data: userData } = await supabaseAdmin.from('users').select('subscription_tier').eq('id', userId).single();
+        const tier = userData?.subscription_tier || 'free';
+
+        if (tier === 'free') {
+            const { data: wsData } = await supabaseAdmin.from('workspaces').select('last_scraped_at').eq('id', workspaceId).single();
+            if (wsData?.last_scraped_at) {
+                const hoursSinceLastScrape = (new Date() - new Date(wsData.last_scraped_at)) / (1000 * 60 * 60);
+                if (hoursSinceLastScrape < 24) {
+                    return res.status(429).json({ error: "Free tier allows 1 manual sync per 24 hours. Upgrade to unlock unlimited manual syncs!" });
+                }
+            }
+        }
+
         const { data: profiles } = await supabaseAdmin.from('social_profiles').select('platform').eq('workspace_id', workspaceId);
         const platforms = new Set(profiles?.map(p => p.platform) || ['reddit']);
 
@@ -384,13 +456,14 @@ app.use((_req, res) => {
 
 // ── Automated Cron Schedules ─────────────────────────────────────────────────
 
-// EVERY 6 HOURS: Anyone who selected '6h'
+// EVERY 6 HOURS: Only Agency users who selected '6h'
 cron.schedule('0 0,6,12,18 * * *', async () => {
     console.log('[Cron] Running 6h scrape schedule...');
     const { data: workspaces } = await supabaseAdmin
         .from('workspaces')
-        .select('id, keywords, user_id')
-        .eq('scrape_frequency', '6h');
+        .select('id, keywords, user_id, users!inner(subscription_tier)')
+        .eq('scrape_frequency', '6h')
+        .eq('users.subscription_tier', 'agency');
 
     if (workspaces) {
         for (const ws of workspaces) {
@@ -401,13 +474,14 @@ cron.schedule('0 0,6,12,18 * * *', async () => {
     }
 });
 
-// DAILY (Midnight): Anyone who selected '24h'
+// DAILY (Midnight): Freelancer or Agency users who selected '24h'
 cron.schedule('0 0 * * *', async () => {
     console.log('[Cron] Running 24h scrape schedule...');
     const { data: workspaces } = await supabaseAdmin
         .from('workspaces')
-        .select('id, keywords, user_id')
-        .eq('scrape_frequency', '24h');
+        .select('id, keywords, user_id, users!inner(subscription_tier)')
+        .eq('scrape_frequency', '24h')
+        .in('users.subscription_tier', ['freelancer', 'agency']);
 
     if (workspaces) {
         for (const ws of workspaces) {
@@ -423,8 +497,9 @@ cron.schedule('0 0 * * 0', async () => {
     console.log('[Cron] Running 7d scrape schedule...');
     const { data: workspaces } = await supabaseAdmin
         .from('workspaces')
-        .select('id, keywords, user_id')
-        .eq('scrape_frequency', '7d');
+        .select('id, keywords, user_id, users!inner(subscription_tier)')
+        .eq('scrape_frequency', '7d')
+        .in('users.subscription_tier', ['freelancer', 'agency']);
 
     if (workspaces) {
         for (const ws of workspaces) {

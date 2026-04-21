@@ -180,7 +180,6 @@ export default function DashboardPage() {
     const { activeWorkspace } = useWorkspace();
     const [signals, setSignals] = useState<Signal[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isScraping, setIsScraping] = useState(false);
     const [activeFilter, setActiveFilter] = useState<Platform>('all');
     const [panelOpen, setPanelOpen] = useState(false);
     const [panelProspect, setPanelProspect] = useState<PanelProspect | undefined>();
@@ -212,38 +211,6 @@ export default function DashboardPage() {
     }, [activeWorkspace]);
 
     useEffect(() => { fetchSignals(); }, [fetchSignals]);
-
-    const handleManualScrape = async () => {
-        if (!activeWorkspace) return;
-        setIsScraping(true);
-        const toastId = toast.loading('Running scraper (this may take a minute)...');
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080'}/api/scrape`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                },
-                body: JSON.stringify({
-                    workspaceId: activeWorkspace.id,
-                    keywords: activeWorkspace.keywords
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                toast.error(data.error || 'Failed to sync manually', { id: toastId });
-            } else {
-                toast.success(`Scrape complete! Found ${data.inserted} new signals.`, { id: toastId });
-                fetchSignals();
-            }
-        } catch (error) {
-            console.error('Manual scrape error:', error);
-            toast.error('Scraping service is temporarily unavailable.', { id: toastId });
-        } finally {
-            setIsScraping(false);
-        }
-    };
 
     // ── Open AI panel ──────────────────────────────────────────────────────────
     const openPanel = (signal: Signal) => {
@@ -346,25 +313,14 @@ export default function DashboardPage() {
                     ))}
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={handleManualScrape}
-                        disabled={isScraping || !activeWorkspace}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 active:scale-95 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 shadow-sm"
-                    >
-                        {/* @ts-expect-error custom element */}
-                        <iconify-icon icon="solar:radar-bold" class={`text-base ${isScraping ? 'animate-spin' : ''}`} />
-                        {isScraping ? 'Scraping...' : 'Run Scraper'}
-                    </button>
-                    <button
-                        onClick={() => toast('Keyword management coming soon!', { icon: '⚙️' })}
-                        className="flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:scale-95 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 border border-indigo-100"
-                    >
-                        {/* @ts-expect-error custom element */}
-                        <iconify-icon icon="solar:settings-linear" class="text-base" />
-                        Manage Keywords
-                    </button>
-                </div>
+                <button
+                    onClick={() => toast('Keyword management coming soon!', { icon: '⚙️' })}
+                    className="flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:scale-95 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 border border-indigo-100"
+                >
+                    {/* @ts-expect-error custom element */}
+                    <iconify-icon icon="solar:settings-linear" class="text-base" />
+                    Manage Keywords
+                </button>
             </div>
 
             {/* ── Kanban Board ─────────────────────────────────────────────────── */}
@@ -482,7 +438,34 @@ export default function DashboardPage() {
                                         ))}
                                         {provided.placeholder}
 
-
+                                        {/* Static paywall card — always visible as upgrade prompt */}
+                                        <div className="relative rounded-xl border border-gray-200 bg-white overflow-hidden">
+                                            <div className="p-4 blur-sm select-none opacity-60 pointer-events-none">
+                                                <PlatformBadge platform="linkedin" source="LinkedIn Post" />
+                                                <p className="mt-2 text-sm text-gray-700 leading-snug line-clamp-2">
+                                                    &ldquo;Our sales team is evaluating new prospecting tools this quarter…&rdquo;
+                                                </p>
+                                                <div className="mt-3 flex items-center justify-between">
+                                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-amber-100 text-amber-600 border-amber-200">Warm</span>
+                                                    <span className="text-[10px] text-gray-400">34 min ago</span>
+                                                </div>
+                                            </div>
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-[2px] px-4 text-center gap-2">
+                                                <div className="w-9 h-9 rounded-full bg-indigo-50 flex items-center justify-center">
+                                                    {/* @ts-expect-error custom element */}
+                                                    <iconify-icon icon="solar:lock-linear" class="text-indigo-500 text-lg" />
+                                                </div>
+                                                <p className="text-xs font-medium text-gray-700">
+                                                    <button
+                                                        onClick={() => toast('🚀 Upgrade to Pro to unlock 45+ more signals!', { icon: '✨' })}
+                                                        className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2 transition-colors"
+                                                    >
+                                                        Upgrade to Pro
+                                                    </button>{' '}
+                                                    to unlock 45 more signals.
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </Droppable>
