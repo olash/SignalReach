@@ -517,6 +517,7 @@ if (process.argv.includes('--scrape')) {
     (async () => {
         try {
             const { data: workspaces, error: wsErr } = await supabaseAdmin.from('workspaces').select('id, keywords').not('keywords', 'is', null);
+            console.log('[DEBUG] Query result:', JSON.stringify(workspaces), 'Error:', wsErr);
             const { data: profiles } = await supabaseAdmin.from('social_profiles').select('workspace_id, platform');
             if (wsErr || !workspaces || workspaces.length === 0) {
                 console.log('[CLI] No keywords or workspaces found to scrape.');
